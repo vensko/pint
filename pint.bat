@@ -436,13 +436,13 @@ rem "Application ID"
 
 		if not "!shim!"=="" (
 			for %%e in (!shim!) do (
-				if "%%~nxi"=="%%~nxe" SET "PASS=1"
+				if /I "%%~nxi"=="%%~nxe" SET "PASS=1"
 			)
 		)
 
 		if not "!noshim!"=="" (
 			for %%e in (!noshim!) do (
-				if "%%~nxi"=="%%~nxe" SET "PASS=0"
+				if /I "%%~nxi"=="%%~nxe" SET "PASS=0"
 			)
 		)
 
