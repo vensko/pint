@@ -17,7 +17,7 @@ set PINT_7ZA_URL="https://github.com/chocolatey/choco/raw/master/src/chocolatey.
 set PINT_XIDEL_URL="http://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel+0.9/xidel-0.9.win32.zip"
 
 rem Functions accessible directly from the command line
-SET PUBLIC_FUNCTIONS=self-update update add install reinstall download remove purge upgrade updated_remote wget psdownload search
+SET PUBLIC_FUNCTIONS=self-update update subscribe list install reinstall download remove purge upgrade updated_remote wget psdownload search
 
 SET TEMP_PACKAGES="%TEMP%\pint_temp_packages.ini"
 SET PACKAGES_FILE="%~dp0packages.ini"
@@ -65,11 +65,13 @@ rem *****************************************
 
 
 :usage
+	echo PINT - Portable INsTaller
+	echo.
 	echo Usage:
-	echo pint update^|self-update^|usage
+	echo pint update^|self-update^|usage^|list
 	echo pint download^|install^|reinstall^|upgrade^|remove^|purge ^<packages^>
-	echo pint search ^<term^>
-	echo pint add ^<packages-ini-url^>
+	echo pint search ^<term^> ^(leave empty for a full list of packages^)
+	echo pint subscribe ^<packages-ini-url^>
 	exit /b 0
 
 
@@ -119,6 +121,11 @@ rem *****************************************
 
 	if exist !TEMP_PACKAGES! del !TEMP_PACKAGES!
 	exit /b 0
+
+
+:list
+	dir /B /A:D "!PINT_APPS_DIR!"
+	exit /b %ERRORLEVEL%
 
 
 :remove
@@ -177,14 +184,18 @@ rem "Application ID"
 
 rem "Term"
 :search
-	if "%~1"=="" echo Enter a search word && exit /b 1
-	findstr /I /R "^^\[.*%~1" "!PACKAGES_FILE_USER!"
-	findstr /I /R "^^\[.*%~1" "!PACKAGES_FILE!"
+	if "%~1"=="" (
+		if exist "!PACKAGES_FILE_USER!" findstr /I /R "^^\[" "!PACKAGES_FILE_USER!"
+		findstr /I /R "^^\[" "!PACKAGES_FILE!"
+	) else (
+		if exist "!PACKAGES_FILE_USER!" findstr /I /R "^^\[.*%~1" "!PACKAGES_FILE_USER!"
+		findstr /I /R "^^\[.*%~1" "!PACKAGES_FILE!"
+	)
 	exit /b 0
 
 
 rem "INI URL"
-:add
+:subscribe
 	SET URL="%~1"
 	for /F "tokens=* delims=" %%f in (!SRC_FILE!) do if "!URL:~1,-1!"=="%%f" echo This URL is already registered. && exit /b 1
 	>>"!SRC_FILE!" echo !URL:~1,-1!
