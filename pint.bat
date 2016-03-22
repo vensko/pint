@@ -14,10 +14,10 @@ set PINT_EXETYPE_URL="http://smithii.com/files/exetype-1.1-win32.zip"
 set PINT_WGET_URL="https://eternallybored.org/misc/wget/current/wget.exe"
 set PINT_INIFILE_URL="http://www.horstmuc.de/win/inifile.zip"
 set PINT_7ZA_URL="https://github.com/chocolatey/choco/raw/master/src/chocolatey.resources/tools/7za.exe"
-set PINT_XIDEL_URL="https://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel 0.9/xidel-0.9.win32.zip"
+set PINT_XIDEL_URL="http://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel+0.9/xidel-0.9.win32.zip"
 
 rem Functions accessible directly from the command line
-SET PUBLIC_FUNCTIONS=self-update update add install download remove purge fetch
+SET PUBLIC_FUNCTIONS=self-update update add install reinstall download remove purge upgrade updated_remote wget psdownload search
 
 SET TEMP_PACKAGES="%TEMP%\pint_temp_packages.ini"
 SET PACKAGES_FILE="%~dp0packages.ini"
@@ -45,9 +45,18 @@ call :has 7za     !PINT_7ZA_URL!     || echo Unable to find 7za     && exit /b 1
 call :has xidel   !PINT_XIDEL_URL!   || echo Unable to find Xidel   && exit /b 1
 
 rem Ready, steady, go
-call :main %*
+if "%~1"=="" call :usage & exit /b 0
 
-exit /b %ERRORLEVEL%
+if not %1==update if not exist !PACKAGES_FILE! call :update
+
+for %%x in (!PUBLIC_FUNCTIONS!) do (
+	if %1==%%x (
+		call :%*
+		exit /b %ERRORLEVEL%
+	)
+)
+echo Unknown command
+exit /b 1
 
 
 rem *****************************************
@@ -55,25 +64,12 @@ rem  FUNCTIONS
 rem *****************************************
 
 
-rem "Command" "Application ID"
-:main
-	if "%~1"=="" call :usage & exit /b 0
-
-	if not %1==update if not exist !PACKAGES_FILE! call :update
-
-	for %%x in (!PUBLIC_FUNCTIONS!) do (
-		if %1==%%x (
-			call :%*
-			exit /b %ERRORLEVEL%
-		)
-	)
-	echo Unknown command
-	exit /b 1
-
-
 :usage
 	echo Usage:
-	echo pint !PUBLIC_FUNCTIONS: =^|!
+	echo pint update^|self-update^|usage
+	echo pint download^|install^|reinstall^|upgrade^|remove^|purge ^<packages^>
+	echo pint search ^<term^>
+	echo pint add ^<packages-ini-url^>
 	exit /b 0
 
 
@@ -125,8 +121,33 @@ rem "Command" "Application ID"
 	exit /b 0
 
 
-rem "Application ID"
 :remove
+	for %%x in (%*) do call :package-remove %%x
+	exit /b 0
+
+:download
+	for %%x in (%*) do call :package-download %%x
+	exit /b 0
+
+:install
+	for %%x in (%*) do call :package-install %%x
+	exit /b 0
+
+:reinstall
+	for %%x in (%*) do call :package-reinstall %%x
+	exit /b 0
+
+:upgrade
+	for %%x in (%*) do call :package-upgrade %%x
+	exit /b 0
+
+:purge
+	for %%x in (%*) do call :package-purge %%x
+	exit /b 0
+
+
+rem "Application ID"
+:package-remove
 	call :is_installed %1
 	if errorlevel 1 echo %1 is not installed && exit /b 0
 
@@ -138,7 +159,7 @@ rem "Application ID"
 
 
 rem "Application ID"
-:purge
+:package-purge
 	if "%~1"=="" (
 		if exist "!PACKAGES_LOCAL!" del "!PACKAGES_LOCAL!"
 		if exist "!PINT_DIST_DIR!" rmdir /S /Q "!PINT_DIST_DIR!"
@@ -154,6 +175,14 @@ rem "Application ID"
 	exit /b 0
 
 
+rem "Term"
+:search
+	if "%~1"=="" echo Enter a search word && exit /b 1
+	findstr /I /R "^^\[.*%~1" "!PACKAGES_FILE_USER!"
+	findstr /I /R "^^\[.*%~1" "!PACKAGES_FILE!"
+	exit /b 0
+
+
 rem "INI URL"
 :add
 	SET URL="%~1"
@@ -163,8 +192,8 @@ rem "INI URL"
 	exit /b 0
 
 
-rem "Application ID"
-:download
+rem "Application ID" "Update"
+:package-download
 	if "%PROCESSOR_ARCHITECTURE%"=="x86" (
 		call :read_db %1 dist
 		call :read_db %1 link
@@ -173,16 +202,21 @@ rem "Application ID"
 		call :read_db %1 link64 link || call :read_db %1 link
 	)
 
-	if "!dist!"=="" echo No URL found. && exit /b 1
+	if not defined dist echo No URL found. && exit /b 1
 
-	if not "!link:%%=%%%%!"=="" for /f %%i in ('xidel "!dist:%%=%%%%!" -e "(!link:%%=%%%%!)[1]/resolve-uri(normalize-space(@href), base-uri())" --quiet') do set "dist=%%i"
+	if defined link for /f %%i in ('xidel "!dist:%%=%%%%!" -e "(!link:%%=%%%%!)[1]/resolve-uri(normalize-space(@href), base-uri())" --quiet') do set "dist=%%i"
 
 	if "!dist:%%=%%%%!"=="" (
 		echo No URL found.
 		exit /b 1
 	)
 
-	call :fetch "!dist:%%=%%%%!" "!PINT_DIST_DIR!\%~1"
+	if not "%~2"=="" (
+		call :check_web_update %1 "!dist:%%=%%%%!" || exit /b 1
+		echo Found an updated version.
+	)
+
+	call :wget "!dist:%%=%%%%!" "!PINT_DIST_DIR!\%~1"
 
 	rem wget -N -t 2 --retry-connrefused --no-check-certificate --directory-prefix="!PINT_DIST_DIR!\%~1" !dist!
 	rem for /f "skip=1 eol=: delims=" %%F in ('dir /b /s /o:d "!PINT_DIST_DIR!\%1"') do @del "%%F"
@@ -190,28 +224,97 @@ rem "Application ID"
 	exit /b %ERRORLEVEL%
 
 
-rem "Application ID"
-:install
-	rem call :is_installed %~1 && echo %~1 is already installed & exit /b 0
+rem "Application ID" "File URL"
+:check_web_update
+	call :history %1 size && ( call :check_web_size "%~2" "!size!" && exit /b %ERRORLEVEL% )
+	exit /b 1
 
-	call :read_db %1 deps
-	if not errorlevel 1 for %%x in (!deps!) do call :install %%x
+rem		call :is_installed %1
+rem		if errorlevel 1 call :install_file %1 "%%i" && exit /b %ERRORLEVEL%
+rem
+rem		call :history %1 ts_dist
+rem		if not "!ts_dist!"=="%%~ti" !DB_LOCAL! [%~1] "ts_dist=%%~ti"
+rem		call :history %1 ts_setup
+rem
+rem		if not "!ts_setup!"=="%%~ti" call :install_file %1 "%%i" && exit /b %ERRORLEVEL%
 
-	call :download %1
 
-	for /f %%i in ('dir /b /s /a:-d "!PINT_DIST_DIR!\%~1"') do (
-		call :is_installed %1
-		if errorlevel 1 call :install_file %1 "%%i" && exit /b %ERRORLEVEL%
+:package-reinstall
+	call :package-install %1 1
+	exit /b %ERRORLEVEL%
 
-		call :history %1 ts_dist
-		if not "!ts_dist!"=="%%~ti" !DB_LOCAL! [%~1] "ts_dist=%%~ti"
-		call :history %1 ts_setup
 
-		if not "!ts_setup!"=="%%~ti" call :install_file %1 "%%i" && exit /b %ERRORLEVEL%
+rem "Application ID" "Force"
+:package-install
+	if "%~2"=="" (
+		call :is_installed %~1 && echo %~1 is already installed && exit /b 0
 	)
+
+	call :read_db %1 deps && for %%x in (!deps!) do call :package-install %%x
+
+	call :package-download %1
+
+	for /f %%i in ('dir /b /s /a:-d "!PINT_DIST_DIR!\%~1"') do call :install_file %1 "%%i"
 
 	exit /b %ERRORLEVEL%
 
+
+rem "Application ID"
+:package-upgrade
+	call :is_installed %1
+
+	if errorlevel 1 (
+		call :package-install %1
+		exit /b %ERRORLEVEL%
+	)
+
+	call :read_db %1 deps && for %%x in (!deps!) do call :package-upgrade "%%x"
+
+	call :package-download %1 1
+
+	if not errorlevel 1 (
+		echo Installing the updated version...
+		for /f %%i in ('dir /b /s /a:-d "!PINT_DIST_DIR!\%~1"') do (
+			call :install_file %1 "%%i"
+			exit /b %ERRORLEVEL%
+		)
+	) else (
+		echo %1 is up to date.
+	)
+
+	exit /b 0
+
+
+rem "URL" "File size"
+:check_web_size
+	SET EXISTS=0
+	SET UPDATED=1
+	SET LINE=
+
+	for /f "usebackq delims=" %%i in (`wget -t 2 --retry-connrefused --no-check-certificate --spider "%~1" -O - 2^>^&1`) do (
+		SET "LINE=%%i"
+		if !EXISTS!==0 (
+			if not "!LINE!"=="!LINE: 200 OK=!" (
+				SET "EXISTS=1"
+			)
+		)
+		if !EXISTS!==1 (
+			if not !UPDATED!==0 (
+				if not "!LINE!"=="!LINE: %~2 =!" (
+					SET UPDATED=0
+				)
+			)
+		)
+	)
+
+	if "!EXISTS!"=="0" (
+		echo The remote file is not found.
+		exit /b 2
+	)
+
+	if "!UPDATED!"=="0" exit /b 1
+	exit /b 0
+	
 
 rem "Application ID" "File path"
 :install_file
@@ -220,25 +323,25 @@ rem "Application ID" "File path"
 
 	echo Installing to !DEST:~1,-1!
 
-	if "%~x2"==".msi" (
+	if /I "%~x2"==".msi" (
 		msiexec /a "%~2" /norestart /qn TARGETDIR=!DEST!
 	) else (
 		call :read_db %1 type || SET "type=%~x2" && SET "type=!type:~1!"
 
-		if "%~1"=="7za" set "type=standalone"
-		if "%~1"=="wget" set "type=standalone"
+		if /I "%~1"=="7za" set "type=standalone"
+		if /I "%~1"=="wget" set "type=standalone"
 
-		if !type!==standalone (
-			copy /Y "%~2" /B !DEST!
+		if /I !type!==standalone (
+			copy /Y "%~2" /B !DEST! >nul
 		) else (
-			if !type!==zip (
+			if /I !type!==zip (
 				call :install_zip %*
 			) else (
-				if !type!==rar (
-					where /Q unrar || call :install unrar
+				if /I !type!==rar (
+					where /Q unrar || call :package-install unrar
 					unrar x -u -inul "%~2" !DEST!
 				) else (
-					where /Q 7z || call :install 7-zip
+					where /Q 7z || call :package-install 7-zip
 					call :install_7z %*
 				)
 			)
@@ -251,8 +354,9 @@ rem "Application ID" "File path"
 
 rem "Application ID" "File path"
 :postinstall
-	call :is_installed %1
-	rem !DB_LOCAL! [%~1] "ts_setup=%~t2"
+	call :is_installed %1 || exit /b 1
+	call !DB_LOCAL! [%~1] "ts_setup=%~t2"
+	call !DB_LOCAL! [%~1] "size=%~z2"
 	call :make_shims %1
 	exit /b 0
 
@@ -273,11 +377,8 @@ rem "Application ID" "Zip file path"
 
 rem "Application ID" "Zip file path"
 :install_7z
-	SET "SEVENZIP="
-	where /Q 7za && SET "SEVENZIP=7za"
+	SET "SEVENZIP=7za"
 	where /Q 7z && SET "SEVENZIP=7z"
-	if "!SEVENZIP!"=="" exit /b 2
-
 	!SEVENZIP! x -y -aoa -o"!PINT_APPS_DIR!\%~1" "%~2" > nul
 	exit /b %ERRORLEVEL%
 
@@ -354,13 +455,6 @@ rem "Application ID"
 
 
 rem "Download URL" "Destination directory"
-:fetch
-	where /Q wget && call :wget %* && exit /b %ERRORLEVEL%
-	where /Q powershell && call :psdownload %* && exit /b %ERRORLEVEL%
-	exit /b 1
-
-
-rem "Download URL" "Destination directory"
 :wget
 	SET URL="%~1"
 	echo Downloading: !URL:~1,-1!
@@ -375,34 +469,28 @@ rem "Download URL" "Destination directory"
 
 rem "Download URL" "Destination directory"
 :psdownload
-	echo Downloading with Powershell^: && echo %~1
+	SET URL="%~1"
+	echo Downloading with Powershell^: && echo !URL:+=%%20!
 
 	if not exist "%~2" mkdir "%~2"
-	powershell -executionpolicy bypass -command "& { (new-object System.Net.WebClient).DownloadFile($args[0], $args[1]); }" "%~1" "%~2\%~nx1" && exit /b 0
+
+	powershell -executionpolicy bypass -command "& { (new-object System.Net.WebClient).DownloadFile($args[0], $args[1]); }" !URL:+=%%20! "%~2\%~nx1" && exit /b 0
 	echo FAILED (code %ERRORLEVEL%) && echo.
 	exit /b 1
 
 
 :read_db
-	if exist !PACKAGES_FILE_USER! (
-		call :read_ini !PACKAGES_FILE_USER! %* || goto :continue_read_db
-		if not "%~3"=="" if not "!%~3!"=="" exit /b 0 else goto :continue_read_db
-		if not "!%~2!"=="" exit /b 0
-	)
-
-	:continue_read_db
-
-	call :read_ini !PACKAGES_FILE! %* || exit /b 1
-	if not "%~3"=="" if not "!%~3!"=="" ( exit /b 0 ) else ( exit /b 1 )
-	if not "!%~2!"=="" exit /b 0
-	exit /b 1
+	call :read_ini !PACKAGES_FILE_USER! %* || call :read_ini !PACKAGES_FILE! %*
+	exit /b %ERRORLEVEL%
 
 
 :read_ini
-	where /Q inifile || exit /b 1
+	if not exist "%~1" exit /b 1
+
 	endlocal & (
 		for /f "usebackq delims=" %%I in (`inifile "%~1" [%2] %3`) do %%I
-		if not "%~4"=="" set "%~4=!%3!"
+		if "!%~3!"=="" exit /b 1
+		if not "%~4"=="" set "%~4=!%~3!"
 	)
 	exit /b 0
 
@@ -412,7 +500,7 @@ rem "Application ID" "Download URL"
 :has
 	where /Q %1 && exit /b 0
 
-	call :fetch "%~2" "!PINT_DIST_DIR!\%~1"
+	call :psdownload "%~2" "!PINT_DIST_DIR!\%~1"
 
 	for /f %%i in ('dir /b /s /a:-d "!PINT_DIST_DIR!\%~1\*"') do (
 		call :install_file %1 "%%i"
