@@ -167,13 +167,15 @@ rem "Application ID"
 :download
 	if "%PROCESSOR_ARCHITECTURE%"=="x86" (
 		call :read_db %1 dist
+		call :read_db %1 link
 	) else (
 		call :read_db %1 dist64 dist || call :read_db %1 dist
+		call :read_db %1 link64 link || call :read_db %1 link
 	)
 
 	if "!dist!"=="" echo No URL found. && exit /b 1
 
-	call :read_db %1 link && for /f %%i in ('xidel "!dist:%%=%%%%!" -e "(!link!)[1]/resolve-uri(normalize-space(@href), base-uri())" --quiet') do set "dist=%%i"
+	if not "!link:%%=%%%%!"=="" for /f %%i in ('xidel "!dist:%%=%%%%!" -e "(!link:%%=%%%%!)[1]/resolve-uri(normalize-space(@href), base-uri())" --quiet') do set "dist=%%i"
 
 	if "!dist:%%=%%%%!"=="" (
 		echo No URL found.
