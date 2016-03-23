@@ -35,8 +35,6 @@ if not exist "!PINT_DIST_DIR!" mkdir "!PINT_DIST_DIR!"
 if not exist "!PINT_APPS_DIR!" mkdir "!PINT_APPS_DIR!"
 if not exist "!PACKAGES_LOCAL!" copy /y NUL "!PACKAGES_LOCAL!" >NUL
 
-if not exist "!PINT_APPS_DIR!\pint.bat" call :_shim "%~dpnx0"
-
 path !PINT_APPS_DIR!;%PATH%
 
 rem Validate the environment and install missing tools
@@ -465,6 +463,7 @@ rem "Application ID"
 	call :_db %1 noshim
 
 	for /f "usebackq delims=" %%i in (`dir /b /s /a-d "!PINT_APPS_DIR!\%~1\*.exe" 2^>nul`) do (
+		echo %%i
 		SET "PASS=1"
 
 		call :_is_cli "%%i"
