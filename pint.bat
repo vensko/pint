@@ -6,7 +6,7 @@ rem PINT - Portable INsTaller
 rem Set variables if they weren't overriden earlier
 if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0packages"
 if not defined PINT_APPS_DIR set "PINT_APPS_DIR=%~dp0apps"
-if not defined PINT_USER_AGENT set "PINT_USER_AGENT=User-Agent^: Mozilla/5.0 ^(Windows NT 6.1; WOW64; rv:40.0^) Gecko/20100101 Firefox/40.1"
+if not defined PINT_USER_AGENT set "PINT_USER_AGENT=User-Agent^: Mozilla/5.0 ^(Windows NT 6.1^; WOW64^; rv^:40.0^) Gecko/20100101 Firefox/40.1"
 
 rem Hardcoded URLs
 set PINT_DEFAULT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini
