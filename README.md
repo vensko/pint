@@ -3,8 +3,7 @@ Portable INsTaller - a package manager for Windows, which fits into a single bat
 
 # Usage
 ```
-pint update|self-update|usage|list 
-pint download|install|reinstall|upgrade|remove|purge <packages> 
-pint search <term> (leave empty for a full list of packages) 
-pint subscribe <packages-ini-url> 
+pint update|self-update|usage|subscribed|installed|search|outdated
+pint download|install|reinstall|installed|search|outdated|upgrade|remove|purge <packages>
+pint subscribe <packages-ini-url>
 ```
