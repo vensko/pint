@@ -218,7 +218,7 @@ rem "Application ID" "Update"
 
 	if not defined dist echo No URL found. && exit /b 1
 
-	if defined link if not "!link!"=="!link://a=!" set link=!link!/resolve-uri(normalize-space(@href), base-uri())
+	if defined link if not "!link!"=="!link:/a=!" set link=!link!/resolve-uri(normalize-space(@href), base-uri())
 	if defined link set link=!link:^"=\"!
 
 	if defined link for /f %%i in ('xidel "!dist!" -e "(!link:%%=%%%%!)[1]" --quiet --user-agent="!PINT_USER_AGENT!"') do set "dist=%%i"
@@ -341,13 +341,13 @@ rem "URL" "File size"
 
 rem "Application ID" "File path"
 :install_file
-	set DEST="!PINT_APPS_DIR!\%~1"
-	if not exist "!DEST:~1,-1!" mkdir "!DEST:~1,-1!"
+	set "DEST=!PINT_APPS_DIR!\%~1"
+	if not exist "!DEST!" mkdir "!DEST!"
 
-	echo Installing to !DEST:~1,-1!
+	echo Installing to !DEST!
 
 	if /I "%~x2"==".msi" (
-		msiexec /a "%~2" /norestart /qn TARGETDIR=!DEST!
+		msiexec /a %2 /norestart /qn TARGETDIR="!DEST!"
 	) else (
 		call :read_db %1 type || SET "type=%~x2" && SET "type=!type:~1!"
 
@@ -355,28 +355,42 @@ rem "Application ID" "File path"
 		if /I "%~1"=="wget" set "type=standalone"
 
 		if /I !type!==standalone (
-			copy /Y "%~2" /B !DEST! >nul
+			copy /Y "%~2" /B "!DEST!" >nul
 		) else (
 			if /I !type!==zip (
-				call :install_zip %*
+				call :install_zip %1 %2 "!DEST!"
 			) else (
 				if /I !type!==rar (
 					where /Q unrar || call :package-install unrar
-					unrar x -u -inul "%~2" !DEST!
+					unrar x -u -inul %2 "!DEST!"
 				) else (
 					where /Q 7z || call :package-install 7-zip
-					call :install_7z %*
+					call :install_7z %1 %2 "!DEST!"
 				)
 			)
 		)
 	)
 
-	call :postinstall %*
+	call :postinstall %1 %2 "!DEST!"
 	exit /b %ERRORLEVEL%
 
 
-rem "Application ID" "File path"
+rem "Application ID" "File path" "Destination directory"
 :postinstall
+	call :read_db %1 exclude
+
+	if defined exclude (
+		for %%x in (!exclude!) do (
+			if exist "%~3\%%x" (
+				if exist "%~3\%%x\*" (
+					rmdir /S /Q "%~3\%%x"
+				) else (
+					del /S /Q "%~3\%%x"
+				)
+			)
+		)
+	)
+
 	call :is_installed %1 || exit /b 1
 	call !DB_LOCAL! [%~1] "ts_setup=%~t2"
 	call !DB_LOCAL! [%~1] "size=%~z2"
@@ -384,25 +398,28 @@ rem "Application ID" "File path"
 	exit /b 0
 
 
-rem "Application ID" "Zip file path"
+rem "Application ID" "Zip file path" "Destination directory"
 :install_zip
-	call :install_7z %1 %2
+	call :install_7z %*
 	if %ERRORLEVEL% LSS 2 exit /b 0
 
-	where /Q unzip && unzip -u "%~2" -d "!PINT_APPS_DIR!\%~1" & exit /b %ERRORLEVEL%
+	where /Q unzip && unzip -u %2 -d %3 & exit /b %ERRORLEVEL%
 
 	where /Q powershell || exit /b 1
 
-	if not exist "!PINT_APPS_DIR!\%~1" mkdir "!PINT_APPS_DIR!\%~1"
-	powershell -command "& { $shell = new-object -com shell.application; $zip = $shell.NameSpace($args[0]); $shell.Namespace($args[1]).copyhere($zip.items()); }" "%~2" "!PINT_APPS_DIR!\%~1"
+	if not exist %3 mkdir %3
+	powershell -command "& { $shell = new-object -com shell.application; $zip = $shell.NameSpace($args[0]); $shell.Namespace($args[1]).copyhere($zip.items()); }" %2 %3
 	exit /b %ERRORLEVEL%
 
 
-rem "Application ID" "Zip file path"
+rem "Application ID" "7zip file path" "Destination directory"
 :install_7z
 	SET "SEVENZIP=7za"
+
 	where /Q 7z && SET "SEVENZIP=7z"
-	!SEVENZIP! x -y -aoa -o"!PINT_APPS_DIR!\%~1" "%~2" > nul
+
+	call !SEVENZIP! x -y -aoa -o"%~3" %2 >nul
+
 	exit /b %ERRORLEVEL%
 
 
@@ -507,6 +524,7 @@ rem "Download URL" "Destination directory"
 	exit /b %ERRORLEVEL%
 
 
+rem "INI file path" "[Section]" "Key" "Variable name (optional)"
 :read_ini
 	if not exist "%~1" exit /b 1
 
