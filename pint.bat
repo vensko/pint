@@ -7,7 +7,11 @@ rem Set variables if they weren't overriden earlier
 if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0packages"
 if not defined PINT_APPS_DIR set "PINT_APPS_DIR=%~dp0apps"
 if not defined PINT_USER_AGENT set "PINT_USER_AGENT=User-Agent^: Mozilla/5.0 ^(Windows NT 6.1^; WOW64^; rv^:40.0^) Gecko/20100101 Firefox/40.1"
+if not defined PINT_PACKAGES_FILE set PINT_PACKAGES_FILE="%~dp0packages.ini"
+if not defined PINT_PACKAGES_FILE_USER set PINT_PACKAGES_FILE_USER="%~dp0packages.user.ini"
+if not defined PINT_SRC_FILE set PINT_SRC_FILE=%~dp0sources.list
 if not defined PINT_TEMP_FILE set "PINT_TEMP_FILE=%TEMP%\pint.tmp"
+if not defined PINT_HISTORY_FILE set PINT_HISTORY_FILE="%~dp0local.ini"
 
 rem Hardcoded URLs
 set PINT_DEFAULT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini
@@ -16,24 +20,21 @@ set PINT_EXETYPE_URL="http://smithii.com/files/exetype-1.1-win32.zip"
 set PINT_WGET_URL="https://eternallybored.org/misc/wget/current/wget.exe"
 set PINT_INIFILE_URL="http://www.horstmuc.de/win/inifile.zip"
 set PINT_7ZA_URL="https://github.com/chocolatey/choco/raw/master/src/chocolatey.resources/tools/7za.exe"
-set PINT_XIDEL_URL="http://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel+0.9/xidel-0.9.win32.zip"
+set PINT_XIDEL_URL="http://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel#200.9/xidel-0.9.win32.zip"
 
 rem Functions accessible directly from the command line
 SET PUBLIC_FUNCTIONS=usage self-update update subscribe subscribed install reinstall installed download remove purge upgrade search outdated
 
-SET PACKAGES_FILE="%~dp0packages.ini"
-SET PACKAGES_FILE_USER="%~dp0packages.user.ini"
-SET SRC_FILE=%~dp0sources.list
+SET DB_LOCAL=inifile !PINT_HISTORY_FILE!
 
-SET PACKAGES_LOCAL=%~dp0local.ini
-SET DB_LOCAL=inifile "!PACKAGES_LOCAL!"
-
-SET WGET=wget -t 2 --retry-connrefused --no-check-certificate --no-http-keep-alive
+SET WGET=wget -t 2 --retry-connrefused --no-check-certificate --content-disposition
 
 rem Create directories if needed
 if not exist "!PINT_DIST_DIR!" mkdir "!PINT_DIST_DIR!"
 if not exist "!PINT_APPS_DIR!" mkdir "!PINT_APPS_DIR!"
-if not exist "!PACKAGES_LOCAL!" copy /y NUL "!PACKAGES_LOCAL!" >NUL
+if not exist !PINT_HISTORY_FILE! copy /y NUL !PINT_HISTORY_FILE! >NUL
+
+SET PINT="%~f0"
 
 path !PINT_APPS_DIR!;%PATH%
 
@@ -47,12 +48,12 @@ call :_has xidel   !PINT_XIDEL_URL!   || echo Unable to find Xidel   && exit /b 
 rem Ready, steady, go
 if "%~1"=="" call :usage & exit /b 0
 
-if not %1==update if not exist !PACKAGES_FILE! call :update
+if not %1==update if not exist !PINT_PACKAGES_FILE! call :update
 
 for %%x in (!PUBLIC_FUNCTIONS!) do (
 	if %1==%%x (
 		call :%*
-		rem if exist "!PINT_TEMP_FILE!" del "!PINT_TEMP_FILE!"
+		if exist "!PINT_TEMP_FILE!" del "!PINT_TEMP_FILE!"
 		exit /b
 	)
 )
@@ -80,7 +81,7 @@ rem *****************************************
 
 	if exist "!PINT_TEMP_FILE!" del "!PINT_TEMP_FILE!"
 
-	!WGET! -q -O "!PINT_TEMP_FILE!" "!PINT_SELF_URL!"
+	cmd /c "!WGET! -qO- "!PINT_SELF_URL!""> "!PINT_TEMP_FILE!"
 
 	if errorlevel 1 (
 		echo Self-update failed^^!
@@ -92,7 +93,7 @@ rem *****************************************
 			echo Self-update failed^^!
 			exit /b 1
 		) else (
-			type "!PINT_TEMP_FILE!" > "%~0"
+			type "!PINT_TEMP_FILE!" > !PINT!
 			echo Pint was updated to the latest version.
 			exit /b 0
 		)
@@ -102,17 +103,19 @@ rem *****************************************
 :update
 	SET /a SRC_COUNT=0
 
-	if not exist "!SRC_FILE!" echo !PINT_DEFAULT_PACKAGES!>"!SRC_FILE!"
+	if not exist "!PINT_SRC_FILE!" echo !PINT_DEFAULT_PACKAGES!> "!PINT_SRC_FILE!"
 
-	copy /y NUL !PACKAGES_FILE! >NUL
+	copy /y NUL !PINT_PACKAGES_FILE! >NUL
 
-	for /F "delims=" %%f in (!SRC_FILE!) do (
+	for /F "delims=" %%f in (!PINT_SRC_FILE!) do (
 		set /p ="Fetching %%f "<nul
-		!WGET! -q -O "!PINT_TEMP_FILE!" "%%f"
+
+		cmd /c "!WGET! -qO- "%%f""> "!PINT_TEMP_FILE!"
+
 		if errorlevel 1 (
 			echo - failed^^!
 		) else (
-			type "!PINT_TEMP_FILE!" >> !PACKAGES_FILE!
+			type "!PINT_TEMP_FILE!" >> !PINT_PACKAGES_FILE!
 			SET /a SRC_COUNT+=1
 			echo.
 		)
@@ -125,23 +128,23 @@ rem *****************************************
 
 
 :subscribed
-	type "!SRC_FILE!"
+	type "!PINT_SRC_FILE!"
 	exit /b !ERRORLEVEL!
 
 
 rem "Term"
 :search
-	if not exist "!PACKAGES_FILE!" call :update
-	if exist "!PACKAGES_FILE_USER!" findstr /I /R "^^\[.*%~1" "!PACKAGES_FILE_USER!" | sort
-	findstr /I /R "^^\[.*%~1" "!PACKAGES_FILE!" | sort
+	if not exist !PINT_PACKAGES_FILE! call :update
+	if exist !PINT_PACKAGES_FILE_USER! findstr /I /R "^^\[.*%~1" !PINT_PACKAGES_FILE_USER! | sort
+	findstr /I /R "^^\[.*%~1" !PINT_PACKAGES_FILE! | sort
 	exit /b 0
 
 
 rem "INI URL"
 :subscribe
 	SET URL="%~1"
-	call findstr /L /X !URL! "!SRC_FILE!" >nul && echo This URL is already registered. && exit /b 1
-	>>"!SRC_FILE!" echo !URL:~1,-1!
+	call findstr /L /X !URL! "!PINT_SRC_FILE!" >nul && echo This URL is already registered. && exit /b 1
+	>>"!PINT_SRC_FILE!" echo !URL:~1,-1!
 	echo Registered !URL:~1,-1!
 	exit /b 0
 
@@ -194,6 +197,12 @@ rem "INI URL"
 	exit /b !ERRORLEVEL!
 
 :purge
+	if "%~1"=="" (
+		if exist !PINT_HISTORY_FILE! del !PINT_HISTORY_FILE!
+		if exist "!PINT_DIST_DIR!" rmdir /S /Q "!PINT_DIST_DIR!"
+		exit /b 0
+	)
+
 	for %%x in (%*) do call :_package_purge %%x
 	exit /b !ERRORLEVEL!
 
@@ -212,12 +221,6 @@ rem "Application ID"
 
 rem "Application ID"
 :_package_purge
-	if "%~1"=="" (
-		if exist "!PACKAGES_LOCAL!" del "!PACKAGES_LOCAL!"
-		if exist "!PINT_DIST_DIR!" rmdir /S /Q "!PINT_DIST_DIR!"
-		exit /b 0
-	)
-
 	echo Removing the %~1 package...
 
 	call :remove %1
@@ -259,7 +262,7 @@ rem "Application ID" "Update"
 	if not defined dist echo Unable to get a link for %1.&& exit /b 1
 
 	call :_download_wget "!dist!" "!PINT_DIST_DIR!\%~1"
-	if errorlevel 1 echo Unable to download an update for %1.&& exit /b 1
+	if errorlevel 1 echo Unable to download %1.&& exit /b 1
 
 	call :_install_app %1
 	exit /b !ERRORLEVEL!
@@ -463,7 +466,6 @@ rem "Application ID"
 	call :_db %1 noshim
 
 	for /f "usebackq delims=" %%i in (`dir /b /s /a-d "!PINT_APPS_DIR!\%~1\*.exe" 2^>nul`) do (
-		echo %%i
 		SET "PASS=1"
 
 		call :_is_cli "%%i"
@@ -525,7 +527,7 @@ rem "Download URL" "Destination directory"
 	SET URL="%~1"
 	SET "URL=!URL:#=%%!"
 	
-	echo Downloading !URL:~1,-1! to %~2
+	echo Downloading !URL:~1,-1!
 	
 	if not exist "%~2" (
 		mkdir "%~2"
@@ -560,10 +562,10 @@ rem "Download URL" "Destination directory"
 	:_continue_download_wget
 
 	if defined DEST_FILE (
-		!WGET! -q -N -O "%~2\!DEST_FILE!" "!URL:~1,-1!"
+		cmd /c "!WGET! -q -N -O "%~2\!DEST_FILE!" "!URL:~1,-1!""
 		if not errorlevel 1 exit /b 0
 	) else (
-		!WGET! -q --directory-prefix="%~2" "!URL:~1,-1!"
+		cmd /c "!WGET! -q --directory-prefix="%~2" "!URL:~1,-1!""
 		if not errorlevel 1 exit /b 0
 	)
 
@@ -574,24 +576,26 @@ rem "Download URL" "Destination directory"
 rem "Download URL" "Destination directory"
 :_download_ps
 	SET URL="%~1"
-	echo Downloading with Powershell^: && echo !URL:+=%%20!
+	SET "URL=!URL:#=%%!"
+
+	echo Downloading: !URL:~1,-1!
 
 	if not exist "%~2" mkdir "%~2"
 
-	powershell -executionpolicy bypass -command "& { (new-object System.Net.WebClient).DownloadFile($args[0], $args[1]); }" !URL:#=%%! "%~2\%~nx1" && exit /b 0
+	powershell -executionpolicy bypass -command "& { (new-object System.Net.WebClient).DownloadFile($args[0], $args[1]); }" "!URL:~1,-1!" "%~2\%~nx1" && exit /b 0
 	echo FAILED (code !ERRORLEVEL!) && echo.
 	exit /b 1
 
 
 rem "[Section]" "Key" "Variable name (optional)"
 :_history
-	call :_read_ini "!PACKAGES_LOCAL!" %*
+	call :_read_ini !PINT_HISTORY_FILE! %*
 	exit /b !ERRORLEVEL!
 
 
 rem "[Section]" "Key" "Variable name (optional)"
 :_db
-	call :_read_ini !PACKAGES_FILE_USER! %* || call :_read_ini !PACKAGES_FILE! %*
+	call :_read_ini !PINT_PACKAGES_FILE_USER! %* || call :_read_ini !PINT_PACKAGES_FILE! %*
 	exit /b !ERRORLEVEL!
 
 
