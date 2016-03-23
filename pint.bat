@@ -6,6 +6,7 @@ rem PINT - Portable INsTaller
 rem Set variables if they weren't overriden earlier
 if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0packages"
 if not defined PINT_APPS_DIR set "PINT_APPS_DIR=%~dp0apps"
+if not defined PINT_USER_AGENT set "PINT_USER_AGENT=User-Agent^: Mozilla/5.0 ^(Windows NT 6.1; WOW64; rv:40.0^) Gecko/20100101 Firefox/40.1"
 
 rem Hardcoded URLs
 set PINT_DEFAULT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini
@@ -156,12 +157,12 @@ rem *****************************************
 rem "Application ID"
 :package-remove
 	call :is_installed %1
-	if errorlevel 1 echo %1 is not installed && exit /b 0
+	if %ERRORLEVEL%==0 echo Uninstalling %~1...
 
-	echo Uninstalling %~1...
 	call :del_shims %1
 	if exist "!PINT_APPS_DIR!\%~1" rmdir /S /Q "!PINT_APPS_DIR!\%~1"
 	!DB_LOCAL! [%~1] ts_setup=
+
 	exit /b 0
 
 
@@ -184,12 +185,14 @@ rem "Application ID"
 
 rem "Term"
 :search
+	if not exist "!PACKAGES_FILE!" call :update
+
 	if "%~1"=="" (
-		if exist "!PACKAGES_FILE_USER!" findstr /I /R "^^\[" "!PACKAGES_FILE_USER!"
-		findstr /I /R "^^\[" "!PACKAGES_FILE!"
+		if exist "!PACKAGES_FILE_USER!" findstr /I /R "^^\[" "!PACKAGES_FILE_USER!" | sort
+		findstr /I /R "^^\[" "!PACKAGES_FILE!" | sort
 	) else (
-		if exist "!PACKAGES_FILE_USER!" findstr /I /R "^^\[.*%~1" "!PACKAGES_FILE_USER!"
-		findstr /I /R "^^\[.*%~1" "!PACKAGES_FILE!"
+		if exist "!PACKAGES_FILE_USER!" findstr /I /R "^^\[.*%~1" "!PACKAGES_FILE_USER!" | sort
+		findstr /I /R "^^\[.*%~1" "!PACKAGES_FILE!" | sort
 	)
 	exit /b 0
 
@@ -215,11 +218,20 @@ rem "Application ID" "Update"
 
 	if not defined dist echo No URL found. && exit /b 1
 
-	if defined link for /f %%i in ('xidel "!dist:%%=%%%%!" -e "(!link:%%=%%%%!)[1]/resolve-uri(normalize-space(@href), base-uri())" --quiet') do set "dist=%%i"
+	if defined link if not "!link!"=="!link://a=!" set link=!link!/resolve-uri(normalize-space(@href), base-uri())
+	if defined link set link=!link:^"=\"!
+
+	if defined link for /f %%i in ('xidel "!dist!" -e "(!link:%%=%%%%!)[1]" --quiet --user-agent="!PINT_USER_AGENT!"') do set "dist=%%i"
 
 	if "!dist:%%=%%%%!"=="" (
 		echo No URL found.
 		exit /b 1
+	)
+
+	if not "!dist!"=="!dist:fosshub.com/=!" (
+		set dist=!dist:fosshub.com/=fosshub.com/genLink/!
+		set dist=!dist:.html/=/!
+		for /f "usebackq delims=" %%i in (`wget -t 2 --retry-connrefused --no-check-certificate "!dist!" -qO-`) do set "dist=%%i"
 	)
 
 	if not "%~2"=="" (
@@ -521,7 +533,6 @@ rem "Application ID" "Download URL"
 	:continue_has
 	where /Q %1
 	exit /b %ERRORLEVEL%
-
 
 
 rem :MakeRelative file base -- makes a file name relative to a base path
