@@ -22,7 +22,7 @@ set PINT_7ZA_URL="https://github.com/chocolatey/choco/raw/master/src/chocolatey.
 set PINT_XIDEL_URL="http://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel#200.9/xidel-0.9.win32.zip"
 
 rem Functions accessible directly from the command line
-SET PUBLIC_FUNCTIONS=usage self-update update subscribe subscribed install reinstall installed download remove purge upgrade search outdated
+SET PUBLIC_FUNCTIONS=usage self-update update subscribe subscribed install reinstall installed download remove purge upgrade search outdated web-install pin unpin
 
 SET DB_LOCAL=inifile !PINT_HISTORY_FILE!
 
@@ -67,8 +67,8 @@ rem *****************************************
 	echo PINT - Portable INsTaller
 	echo.
 	echo Usage:
-	echo pint update^|self-update^|usage^|subscribed^|installed^|search^|outdated
-	echo pint download^|install^|reinstall^|installed^|search^|outdated^|upgrade^|remove^|purge ^<packages^>
+	echo pint update^|self-update^|usage^|subscribed^|installed^|search^|outdated^|upgrade
+	echo pint download^|install^|reinstall^|installed^|search^|outdated^|upgrade^|remove^|purge^|pin^|unpin ^<package(s)^>
 	echo pint subscribe ^<packages-ini-url^>
 	exit /b 0
 
@@ -173,6 +173,45 @@ rem "INI URL"
 	exit /b !ERRORLEVEL!
 
 
+rem "Application ID" "File URL"
+:web-install
+	if not "%~3"=="" (
+		echo Incorrect parameters.
+		echo Use: ^<package^> "^<url^>"
+		exit /b 1
+	)
+
+	call :_is_upgradable || exit /b 1
+
+	call :_db %1 dist
+
+	if defined dist (
+		echo %~1 is present in a remote database.
+		SET /P "CONFIRMED=Do you want to add this URL as a permanent source into the user configuration? [Y/N] "
+		if /I not "!CONFIRMED!"=="Y" exit /b 1
+	)
+
+	call :_download_wget "%~2" "!PINT_DIST_DIR!\%~1"
+	if errorlevel 1 echo Unable to download %1 from %~2.&& exit /b 1
+
+	call :_install_app %1
+
+	if not errorlevel 1 (
+		if not exist !PINT_PACKAGES_FILE_USER! copy /y NUL !PINT_PACKAGES_FILE_USER! >NUL
+		call inifile !PINT_PACKAGES_FILE_USER! [%~1] "dist=%~2"
+	)
+
+	exit /b !ERRORLEVEL!
+
+
+:pin
+	for %%x in (%*) do call :_package_pin %%x
+	exit /b !ERRORLEVEL!
+
+:unpin
+	for %%x in (%*) do call :_package_unpin %%x
+	exit /b !ERRORLEVEL!
+
 :remove
 	for %%x in (%*) do call :_package_remove %%x
 	exit /b !ERRORLEVEL!
@@ -190,7 +229,12 @@ rem "INI URL"
 	exit /b !ERRORLEVEL!
 
 :upgrade
-	for %%x in (%*) do call :_package_upgrade %%x
+	if not "%~1"=="" (
+		for %%x in (%*) do call :_package_upgrade %%x
+		exit /b !ERRORLEVEL!
+	)
+
+	for /f "usebackq delims=" %%x in (`dir /b /ad "!PINT_APPS_DIR!" 2^>nul`) do call :_package_upgrade %%x
 	exit /b !ERRORLEVEL!
 
 :purge
@@ -204,13 +248,25 @@ rem "INI URL"
 
 
 rem "Application ID"
+:_package_pin
+	call !DB_LOCAL! [%~1] "pinned=1"
+	if not errorlevel 1 echo %~1 is pinned.
+	exit /b !ERRORLEVEL!
+
+rem "Application ID"
+:_package_unpin
+	call !DB_LOCAL! [%~1] "pinned="
+	if not errorlevel 1 echo %~1 is unpinned.
+	exit /b !ERRORLEVEL!
+
+rem "Application ID"
 :_package_remove
 	call :_is_installed %1
 	if not errorlevel 1 echo Uninstalling %~1...
 
 	call :_app_del_shims %1
 	if exist "!PINT_APPS_DIR!\%~1" rmdir /S /Q "!PINT_APPS_DIR!\%~1"
-	!DB_LOCAL! [%~1] ts_setup=
+	call !DB_LOCAL! [%~1] ts_setup=
 
 	exit /b 0
 
@@ -221,7 +277,7 @@ rem "Application ID"
 
 	call :remove %1
 	if exist "!PINT_DIST_DIR!\%~1" rmdir /S /Q "!PINT_DIST_DIR!\%~1"
-	!DB_LOCAL! [%~1] /remove
+	call !DB_LOCAL! [%~1] /remove
 
 	exit /b 0
 
@@ -254,6 +310,8 @@ rem "Application ID" "Update"
 
 
 :_package_force_install
+	call :_is_upgradable || exit /b 1
+
 	call :_db %1 deps
 	if defined deps for %%x in (!deps!) do call :_package_install %%x
 
@@ -279,6 +337,9 @@ rem "Application ID"
 	call :_is_installed %1
 	if errorlevel 1 ( call :_package_install %1 & exit /b !ERRORLEVEL! )
 
+	call :_is_upgradable %1
+	if errorlevel 1 exit /b 1
+
 	call :_db %1 deps
 	if defined deps for %%x in (!deps!) do call :_package_upgrade "%%x"
 
@@ -296,8 +357,18 @@ rem "Application ID"
 	)
 
 	call :_install_app %1
-
 	exit /b !ERRORLEVEL!
+
+
+rem "Application ID"
+:_is_upgradable
+	call :_history %1 pinned
+	if defined pinned (
+		echo Updates for %~1 are suppressed. To allow this install, use:
+		echo pint unpin %~1
+		exit /b 1
+	)
+	exit /b 0
 
 
 rem "Application ID" "Variable name"
