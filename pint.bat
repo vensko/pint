@@ -9,8 +9,8 @@ if not defined PINT_APPS_DIR set "PINT_APPS_DIR=%~dp0apps"
 if not defined PINT_USER_AGENT set "PINT_USER_AGENT=User-Agent^: Mozilla/5.0 ^(Windows NT 6.1^; WOW64^; rv^:40.0^) Gecko/20100101 Firefox/40.1"
 if not defined PINT_PACKAGES_FILE set PINT_PACKAGES_FILE="%~dp0packages.ini"
 if not defined PINT_PACKAGES_FILE_USER set PINT_PACKAGES_FILE_USER="%~dp0packages.user.ini"
-if not defined PINT_SRC_FILE set PINT_SRC_FILE=%~dp0sources.list
-if not defined PINT_TEMP_FILE set "PINT_TEMP_FILE=%TEMP%\pint.tmp"
+if not defined PINT_SRC_FILE set PINT_SRC_FILE="%~dp0sources.list"
+if not defined PINT_TEMP_FILE set PINT_TEMP_FILE="%TEMP%\pint.tmp"
 if not defined PINT_HISTORY_FILE set PINT_HISTORY_FILE="%~dp0local.ini"
 
 rem Hardcoded URLs
@@ -27,14 +27,13 @@ SET PUBLIC_FUNCTIONS=usage self-update update subscribe subscribed install reins
 SET DB_LOCAL=inifile !PINT_HISTORY_FILE!
 
 SET WGET=wget -t 2 --retry-connrefused --no-check-certificate --content-disposition
+SET POWERSHELL=powershell -NonInteractive -NoProfile -executionpolicy bypass
 
 rem Create directories if needed
-if not exist "!PINT_DIST_DIR!" mkdir "!PINT_DIST_DIR!"
 if not exist "!PINT_APPS_DIR!" mkdir "!PINT_APPS_DIR!"
 if not exist !PINT_HISTORY_FILE! copy /y NUL !PINT_HISTORY_FILE! >NUL
 
 SET PINT="%~f0"
-
 path !PINT_APPS_DIR!;%PATH%
 
 rem Validate the environment and install missing tools
@@ -51,7 +50,7 @@ if not %1==update if not exist !PINT_PACKAGES_FILE! call :update
 for %%x in (!PUBLIC_FUNCTIONS!) do (
 	if %1==%%x (
 		call :%*
-		if exist "!PINT_TEMP_FILE!" del "!PINT_TEMP_FILE!"
+		if exist !PINT_TEMP_FILE! del !PINT_TEMP_FILE!
 		exit /b
 	)
 )
@@ -77,21 +76,21 @@ rem *****************************************
 :self-update
 	echo Fetching !PINT_SELF_URL!
 
-	if exist "!PINT_TEMP_FILE!" del "!PINT_TEMP_FILE!"
+	if exist !PINT_TEMP_FILE! del !PINT_TEMP_FILE!
 
-	cmd /c "!WGET! -qO- "!PINT_SELF_URL!""> "!PINT_TEMP_FILE!"
+	cmd /c "!WGET! -qO- "!PINT_SELF_URL!""> !PINT_TEMP_FILE!
 
 	if errorlevel 1 (
 		echo Self-update failed^^!
 		exit /b 1
 	) else (
-		findstr /L /C:"PINT - Portable INsTaller" "!PINT_TEMP_FILE!" >nul
+		findstr /L /C:"PINT - Portable INsTaller" !PINT_TEMP_FILE! >nul
 
 		if errorlevel 1 (
 			echo Self-update failed^^!
 			exit /b 1
 		) else (
-			type "!PINT_TEMP_FILE!" > !PINT!
+			type !PINT_TEMP_FILE! > !PINT!
 			echo Pint was updated to the latest version.
 			exit /b 0
 		)
@@ -101,19 +100,19 @@ rem *****************************************
 :update
 	SET /a SRC_COUNT=0
 
-	if not exist "!PINT_SRC_FILE!" echo !PINT_DEFAULT_PACKAGES!> "!PINT_SRC_FILE!"
+	if not exist !PINT_SRC_FILE! echo !PINT_DEFAULT_PACKAGES!> !PINT_SRC_FILE!
 
 	copy /y NUL !PINT_PACKAGES_FILE! >NUL
 
-	for /f "usebackq delims=" %%f in ("!PINT_SRC_FILE!") do (
+	for /f "usebackq delims=" %%f in ("!PINT_SRC_FILE:~1,-1!") do (
 		set /p ="Fetching %%f "<nul
 
-		cmd /c "!WGET! -qO- "%%f""> "!PINT_TEMP_FILE!"
+		cmd /c "!WGET! -qO- "%%f""> !PINT_TEMP_FILE!
 
 		if errorlevel 1 (
 			echo - failed^^!
 		) else (
-			type "!PINT_TEMP_FILE!" >> !PINT_PACKAGES_FILE!
+			type !PINT_TEMP_FILE! >> !PINT_PACKAGES_FILE!
 			SET /a SRC_COUNT+=1
 			echo.
 		)
@@ -126,7 +125,7 @@ rem *****************************************
 
 
 :subscribed
-	type "!PINT_SRC_FILE!"
+	type !PINT_SRC_FILE!
 	exit /b !ERRORLEVEL!
 
 
@@ -141,8 +140,8 @@ rem "Term"
 rem "INI URL"
 :subscribe
 	SET URL="%~1"
-	call findstr /L /X !URL! "!PINT_SRC_FILE!" >nul && echo This URL is already registered. && exit /b 1
-	>>"!PINT_SRC_FILE!" echo !URL:~1,-1!
+	call findstr /L /X !URL! !PINT_SRC_FILE! >nul && echo This URL is already registered. && exit /b 1
+	>>!PINT_SRC_FILE! echo !URL:~1,-1!
 	echo Registered !URL:~1,-1!
 	exit /b 0
 
@@ -196,7 +195,6 @@ rem "INI URL"
 
 :purge
 	if "%~1"=="" (
-		if exist !PINT_HISTORY_FILE! del !PINT_HISTORY_FILE!
 		if exist "!PINT_DIST_DIR!" rmdir /S /Q "!PINT_DIST_DIR!"
 		exit /b 0
 	)
@@ -210,7 +208,7 @@ rem "Application ID"
 	call :_is_installed %1
 	if not errorlevel 1 echo Uninstalling %~1...
 
-	call :app_del_shims %1
+	call :_app_del_shims %1
 	if exist "!PINT_APPS_DIR!\%~1" rmdir /S /Q "!PINT_APPS_DIR!\%~1"
 	!DB_LOCAL! [%~1] ts_setup=
 
@@ -360,14 +358,14 @@ rem "URL" "File size"
 		)
 	)
 
-	cmd /c "!WGET! -S -q --spider "!URL:~1,-1!" -O - 2^>^&1" > "!PINT_TEMP_FILE!"
+	cmd /c "!WGET! -S -q --spider "!URL:~1,-1!" -O - 2^>^&1" > !PINT_TEMP_FILE!
 
-	findstr /L /C:" 200 OK" "!PINT_TEMP_FILE!" >nul && SET EXISTS=1
-	findstr /L /C:" SIZE " "!PINT_TEMP_FILE!" >nul && SET EXISTS=1
+	findstr /L /C:" 200 OK" !PINT_TEMP_FILE! >nul && SET EXISTS=1
+	findstr /L /C:" SIZE " !PINT_TEMP_FILE! >nul && SET EXISTS=1
 	if not defined EXISTS exit /b 2
 
 	rem NOT UPDATED
-	findstr /L /C:" %~2" "!PINT_TEMP_FILE!" >nul && exit /b 1
+	findstr /L /C:" %~2" !PINT_TEMP_FILE! >nul && exit /b 1
 
 	rem EXISTS AND UPDATED
 	exit /b 0
@@ -435,6 +433,8 @@ rem "Application ID" "File path" "Destination directory"
 
 	call !DB_LOCAL! [%~1] "ts_setup=%~t2"
 	call !DB_LOCAL! [%~1] "size=%~z2"
+
+	call :_app_get_version %1
 	call :_app_make_shims %1
 
 	exit /b 0
@@ -450,7 +450,7 @@ rem "Zip file path" "Destination directory"
 	where /Q powershell || exit /b 1
 
 	if not exist %2 mkdir %2
-	powershell -NonInteractive -NoProfile -executionpolicy bypass -Command "& { $shell = new-object -com shell.application; $zip = $shell.NameSpace($args[0]); $shell.Namespace($args[1]).copyhere($zip.items()); }" %1 %2
+	!POWERSHELL! -command "& { $shell = new-object -com shell.application; $zip = $shell.NameSpace(\"%~1\"); $shell.Namespace(\"%~2\").copyhere($zip.items()); }"
 	exit /b !ERRORLEVEL!
 
 
@@ -498,7 +498,7 @@ rem "Application ID"
 
 
 rem "Application ID"
-:app_del_shims
+:_app_del_shims
 	forfiles /P "!PINT_APPS_DIR!\%~1" /M "*.exe" /S /C "cmd /d /c if exist "!PINT_APPS_DIR!\@fname.bat" del "!PINT_APPS_DIR!\@fname.bat"" >nul 2>&1
 	exit /b !ERRORLEVEL!
 
@@ -582,7 +582,7 @@ rem "Download URL" "Destination directory"
 
 	if not exist "%~2" mkdir "%~2"
 
-	powershell -NonInteractive -NoProfile -executionpolicy bypass -command "& { (new-object System.Net.WebClient).DownloadFile($args[0], $args[1]); }" "!URL:~1,-1!" "%~2\%~nx1" && exit /b 0
+	!POWERSHELL! -command "& { (new-object System.Net.WebClient).DownloadFile(\"!URL:~1,-1!\", \"%~2\%~nx1\"); }" && exit /b 0
 	echo FAILED (code !ERRORLEVEL!) && echo.
 	exit /b 1
 
@@ -599,50 +599,77 @@ rem "[Section]" "Key" "Variable name (optional)"
 	exit /b !ERRORLEVEL!
 
 
+rem "Application ID"
+:_app_get_version
+	for /f "usebackq delims=" %%i in (`dir /b /s /a-d /o-s "!PINT_APPS_DIR!\%~1\*.exe" 2^>nul`) do (
+		call :_filever "%%i" filever
+		if defined filever (
+			call !DB_LOCAL! [%~1] "version=!filever!"
+			exit /b 0
+		)
+		exit /b 1
+	)
+	exit /b 1
+
+
+rem "Executable path" "Variable name"
+:_filever
+	@endlocal
+	SET "%~2="
+
+	if not exist "%~1" exit /b 1
+
+	for /f "usebackq delims=" %%i in (`!POWERSHELL! -command ^"^& { (new-object -com scripting.filesystemobject^).GetFileVersion(\"%~1\"^) }^" 2^>nul`) do (
+		SET "%~2=%%i"
+		exit /b 0
+	)
+
+	exit /b !ERRORLEVEL!
+
+
 rem "INI file path" "[Section]" "Key" "Variable name (optional)"
 :_read_ini
+	@endlocal & (
+		if not "%~3"=="" SET "%~3="
+		if not "%~4"=="" SET "%~4="
+	)
 
-if not exist "%~1" exit /b 1
-if "%~3"=="" exit /b 1
+	if "%~3"=="" exit /b 1
+	if not exist "%~1" exit /b 1
 
-endlocal & (
-	SET "%~3="
-	if not "%~4"=="" SET "%~4="
-)
+	SET SECTION=
+	SET KEY=
 
-SET SECTION=
-SET KEY=
+	for /f "usebackq tokens=1* delims=^= " %%A in ("%~1") do (
+		if not defined SECTION (
+			if /I "%%A"=="[%~2]" (
+				SET SECTION=1
+			)
+		) else (
+			SET "KEY=%%A"
+			if "!KEY:~0,1!"=="[" exit /b 1
 
-for /f "usebackq tokens=1* delims=^= " %%A in ("%~1") do (
-	if not defined SECTION (
-		if /I "%%A"=="[%~2]" (
-			SET SECTION=1
-		)
-	) else (
-		SET "KEY=%%A"
-		if "!KEY:~0,1!"=="[" exit /b 1
-
-		if not "%%B"=="" (
-			if /I "%%A"=="%~3" (
-				endlocal & (
-					if not "%~4"=="" (
-						SET "%~4=%%B"
-					) else (
-						SET "%%A=%%B"
+			if not "%%B"=="" (
+				if /I "%%A"=="%~3" (
+					endlocal & (
+						if not "%~4"=="" (
+							SET "%~4=%%B"
+						) else (
+							SET "%%A=%%B"
+						)
+						exit /b 0
 					)
-					exit /b 0
 				)
 			)
 		)
 	)
-)
 
-exit /b 1
+	exit /b 1
 
 
 rem "Executable path"
 :_is_cli
-	powershell -NonInteractive -NoProfile -executionpolicy bypass -command "& { try { $fs = [IO.File]::OpenRead((Convert-Path \"$args\")); $br = New-Object IO.BinaryReader($fs); if ($br.ReadUInt16() -ne 23117) { exit 1 } $fs.Position = 0x3C; $fs.Position = $br.ReadUInt32(); $offset = $fs.Position; if ($br.ReadUInt32() -ne 17744) { exit 2 } $fs.Position += 0x14; switch ($br.ReadUInt16()) { 0x10B { $bit = 32 } 0x20B { $bit = 64 } } $fs.Position = $offset + 4 + 20 + 68; $subsystem = $br.ReadUInt16(); exit $subsystem }catch { $_.Exception; exit 65535 }finally { if ($br  -ne $null) { $br.Close() } if ($fs  -ne $null) { $fs.Close() } } }" "%~1"
+	!POWERSHELL! -command "& { try { $fs = [IO.File]::OpenRead((Convert-Path \"%~1\")); $br = New-Object IO.BinaryReader($fs); if ($br.ReadUInt16() -ne 23117) { exit 1 } $fs.Position = 0x3C; $fs.Position = $br.ReadUInt32(); $offset = $fs.Position; if ($br.ReadUInt32() -ne 17744) { exit 2 } $fs.Position += 0x14; switch ($br.ReadUInt16()) { 0x10B { $bit = 32 } 0x20B { $bit = 64 } } $fs.Position = $offset + 4 + 20 + 68; $subsystem = $br.ReadUInt16(); exit $subsystem }catch { $_.Exception; exit 65535 }finally { if ($br  -ne $null) { $br.Close() } if ($fs  -ne $null) { $fs.Close() } } }"
 	if !ERRORLEVEL!==3 exit /b 0
 	exit /b 1
 
