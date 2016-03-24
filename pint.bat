@@ -16,7 +16,6 @@ if not defined PINT_HISTORY_FILE set PINT_HISTORY_FILE="%~dp0local.ini"
 rem Hardcoded URLs
 set PINT_DEFAULT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini
 set PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.bat
-set PINT_EXETYPE_URL="http://smithii.com/files/exetype-1.1-win32.zip"
 set PINT_WGET_URL="https://eternallybored.org/misc/wget/current/wget.exe"
 set PINT_INIFILE_URL="http://www.horstmuc.de/win/inifile.zip"
 set PINT_7ZA_URL="https://github.com/chocolatey/choco/raw/master/src/chocolatey.resources/tools/7za.exe"
@@ -39,7 +38,6 @@ SET PINT="%~f0"
 path !PINT_APPS_DIR!;%PATH%
 
 rem Validate the environment and install missing tools
-call :_has exetype !PINT_EXETYPE_URL! || echo Unable to find exetype && exit /b 1
 call :_has inifile !PINT_INIFILE_URL! || echo Unable to find inifile && exit /b 1
 call :_has wget    !PINT_WGET_URL!    || echo Unable to find Wget    && exit /b 1
 call :_has 7za     !PINT_7ZA_URL!     || echo Unable to find 7za     && exit /b 1
@@ -452,7 +450,7 @@ rem "Zip file path" "Destination directory"
 	where /Q powershell || exit /b 1
 
 	if not exist %2 mkdir %2
-	powershell -command "& { $shell = new-object -com shell.application; $zip = $shell.NameSpace($args[0]); $shell.Namespace($args[1]).copyhere($zip.items()); }" %1 %2
+	powershell -NonInteractive -NoProfile -executionpolicy bypass -Command "& { $shell = new-object -com shell.application; $zip = $shell.NameSpace($args[0]); $shell.Namespace($args[1]).copyhere($zip.items()); }" %1 %2
 	exit /b !ERRORLEVEL!
 
 
@@ -523,14 +521,6 @@ rem "Base path" "Executable file"
 	exit /b !ERRORLEVEL!
 
 
-rem "Executable file"
-:_is_cli
-	if /I "%~nx1"=="exetype.exe" exit /b 0
-	call exetype -q "%~1" 2>nul
-	if !ERRORLEVEL!==3 exit /b 0
-	exit /b 1
-
-
 rem "Download URL" "Destination directory"
 :_download_wget
 	SET "DEST_FILE="
@@ -572,10 +562,10 @@ rem "Download URL" "Destination directory"
 	:_continue_download_wget
 
 	if defined DEST_FILE (
-		cmd /c "!WGET! -q -N -O "%~2\!DEST_FILE!" "!URL:~1,-1!""
+		cmd /c "!WGET! -N -q -O "%~2\!DEST_FILE!" "!URL:~1,-1!""
 		if not errorlevel 1 exit /b 0
 	) else (
-		cmd /c "!WGET! -q --directory-prefix="%~2" "!URL:~1,-1!""
+		cmd /c "!WGET! -N -q --directory-prefix="%~2" "!URL:~1,-1!""
 		if not errorlevel 1 exit /b 0
 	)
 
@@ -592,7 +582,7 @@ rem "Download URL" "Destination directory"
 
 	if not exist "%~2" mkdir "%~2"
 
-	powershell -executionpolicy bypass -command "& { (new-object System.Net.WebClient).DownloadFile($args[0], $args[1]); }" "!URL:~1,-1!" "%~2\%~nx1" && exit /b 0
+	powershell -NonInteractive -NoProfile -executionpolicy bypass -command "& { (new-object System.Net.WebClient).DownloadFile($args[0], $args[1]); }" "!URL:~1,-1!" "%~2\%~nx1" && exit /b 0
 	echo FAILED (code !ERRORLEVEL!) && echo.
 	exit /b 1
 
@@ -620,6 +610,13 @@ rem "INI file path" "[Section]" "Key" "Variable name (optional)"
 	)
 
 	exit /b 0
+
+
+rem "Executable path"
+:_is_cli
+	powershell -NonInteractive -NoProfile -executionpolicy bypass -command "& { try { $fs = [IO.File]::OpenRead((Convert-Path \"$args\")); $br = New-Object IO.BinaryReader($fs); if ($br.ReadUInt16() -ne 23117) { exit 1 } $fs.Position = 0x3C; $fs.Position = $br.ReadUInt32(); $offset = $fs.Position; if ($br.ReadUInt32() -ne 17744) { exit 2 } $fs.Position += 0x14; switch ($br.ReadUInt16()) { 0x10B { $bit = 32 } 0x20B { $bit = 64 } } $fs.Position = $offset + 4 + 20 + 68; $subsystem = $br.ReadUInt16(); exit $subsystem }catch { $_.Exception; exit 65535 }finally { if ($br  -ne $null) { $br.Close() } if ($fs  -ne $null) { $fs.Close() } } }" "%~1"
+	if !ERRORLEVEL!==3 exit /b 0
+	exit /b 1
 
 
 rem Installs missing executables
