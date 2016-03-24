@@ -105,7 +105,7 @@ rem *****************************************
 
 	copy /y NUL !PINT_PACKAGES_FILE! >NUL
 
-	for /F "delims=" %%f in (!PINT_SRC_FILE!) do (
+	for /f "usebackq delims=" %%f in ("!PINT_SRC_FILE!") do (
 		set /p ="Fetching %%f "<nul
 
 		cmd /c "!WGET! -qO- "%%f""> "!PINT_TEMP_FILE!"
@@ -356,7 +356,7 @@ rem "URL" "File size"
 	if not "!URL!"=="!URL:github.com/=!" (
 		if not "!URL!"=="!URL:releases/download=!" (
 			echo Checking updates via Github Releases is not supported ^(yet^).
-			exit /b 0
+			exit /b 1
 		)
 	)
 
@@ -601,15 +601,43 @@ rem "[Section]" "Key" "Variable name (optional)"
 
 rem "INI file path" "[Section]" "Key" "Variable name (optional)"
 :_read_ini
-	if not exist "%~1" exit /b 1
 
-	endlocal & (
-		for /f "usebackq delims=" %%I in (`inifile "%~1" [%2] %3`) do %%I
-		if "!%~3!"=="" exit /b 1
-		if not "%~4"=="" set "%~4=!%~3!"
+if not exist "%~1" exit /b 1
+if "%~3"=="" exit /b 1
+
+endlocal & (
+	SET "%~3="
+	if not "%~4"=="" SET "%~4="
+)
+
+SET SECTION=
+SET KEY=
+
+for /f "usebackq tokens=1* delims=^= " %%A in ("%~1") do (
+	if not defined SECTION (
+		if /I "%%A"=="[%~2]" (
+			SET SECTION=1
+		)
+	) else (
+		SET "KEY=%%A"
+		if "!KEY:~0,1!"=="[" exit /b 1
+
+		if not "%%B"=="" (
+			if /I "%%A"=="%~3" (
+				endlocal & (
+					if not "%~4"=="" (
+						SET "%~4=%%B"
+					) else (
+						SET "%%A=%%B"
+					)
+					exit /b 0
+				)
+			)
+		)
 	)
+)
 
-	exit /b 0
+exit /b 1
 
 
 rem "Executable path"
