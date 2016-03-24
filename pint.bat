@@ -232,6 +232,9 @@ rem "Application ID"
 
 rem "Application ID"
 :_package_outdated
+	call :_is_installed %1
+	if errorlevel 1 echo %1 is not installed.&& exit /b 1
+
 	call :_get_dist_link %1 dist
 	if not defined dist echo Unable to get a link for %1.&& exit /b 1
 
@@ -352,7 +355,14 @@ rem "URL" "File size"
 	SET URL=%~1
 	SET URL="!URL:#=%%!"
 
-	cmd /c "!WGET! --spider "!URL:~1,-1!" -O - 2^>^&1" > "!PINT_TEMP_FILE!"
+	if not "!URL!"=="!URL:github.com/=!" (
+		if not "!URL!"=="!URL:releases/download=!" (
+			echo Checking updates via Github Releases is not supported ^(yet^).
+			exit /b 0
+		)
+	)
+
+	cmd /c "!WGET! -S -q --spider "!URL:~1,-1!" -O - 2^>^&1" > "!PINT_TEMP_FILE!"
 
 	findstr /L /C:" 200 OK" "!PINT_TEMP_FILE!" >nul && SET EXISTS=1
 	findstr /L /C:" SIZE " "!PINT_TEMP_FILE!" >nul && SET EXISTS=1
@@ -504,7 +514,7 @@ rem "Base path" "Executable file"
 		>"!PINT_APPS_DIR!\%~n2.bat" (
 			echo @echo off
 			echo !RELPATH! %%*
-			echo exit /b %!ERRORLEVEL!%
+			echo exit /b %%ERRORLEVEL%%
 		)
 
 		echo Added a shim for %%~nxi
