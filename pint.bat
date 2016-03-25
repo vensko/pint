@@ -27,7 +27,7 @@ SET PUBLIC_FUNCTIONS=usage self-update update subscribe subscribed install reins
 SET DB_LOCAL=inifile !PINT_HISTORY_FILE!
 
 SET CURL=curl --insecure --ssl-no-revoke --ssl-allow-beast --progress-bar --remote-header-name --location --max-redirs 5 --retry 2 --retry-delay 1 -X GET
-SET POWERSHELL=powershell -NonInteractive -NoProfile -executionpolicy bypass
+SET POWERSHELL=powershell -NonInteractive -NoLogo -NoProfile -executionpolicy bypass
 
 rem Create directories if needed
 if not exist "!PINT_APPS_DIR!" mkdir "!PINT_APPS_DIR!"
@@ -79,7 +79,7 @@ rem *****************************************
 
 	if exist !PINT_TEMP_FILE! del !PINT_TEMP_FILE!
 
-	call !CURL! -s -S -o !PINT_TEMP_FILE! "!PINT_SELF_URL!"
+	cmd /c "!CURL! -s -S -o !PINT_TEMP_FILE! "!PINT_SELF_URL!""
 
 	if errorlevel 1 (
 		echo Self-update failed^^!
@@ -108,7 +108,7 @@ rem *****************************************
 	for /f "usebackq delims=" %%f in ("!PINT_SRC_FILE:~1,-1!") do (
 		set /p ="Fetching %%f "<nul
 
-		call !CURL! --compressed -s -S -o !PINT_TEMP_FILE! "%%f"
+		cmd /c "!CURL! --compressed -s -S -o !PINT_TEMP_FILE! "%%f""
 
 		if errorlevel 1 (
 			echo - failed^^!
@@ -437,7 +437,7 @@ rem "URL" "File size" "Application ID"
 	SET URL=%~1
 	SET URL="!URL:#=%%!"
 
-	call !CURL! -s -S -I "!URL:~1,-1!" -o !PINT_TEMP_FILE!
+	cmd /c "!CURL! -s -S -I "!URL:~1,-1!" -o !PINT_TEMP_FILE!"
 
 	findstr /L /C:" 200 OK" !PINT_TEMP_FILE! >nul && SET EXISTS=1
 	findstr /L /C:" SIZE " !PINT_TEMP_FILE! >nul && SET EXISTS=1
@@ -581,23 +581,13 @@ rem "Application ID"
 			if not !_subsystem!==3 SET "PASS=0"
 		)
 
-		if defined shim (
-			for %%e in (!shim!) do (
-				if /I "%%~nxi"=="%%~nxe" SET "PASS=1"
-			)
-		)
-
 		if !PASS!==1 call :_shim "!PINT_APPS_DIR!\%~1" "%%i"
 	)
 
-	for /f "usebackq delims=" %%i in (`cd "!PINT_APPS_DIR!\%~1" 2^>nul ^&^& dir /b /s /a-d *.bat *.cmd 2^>nul`) do (
-		SET "PASS=0"
-		if defined shim (
-			for %%e in (!shim!) do (
-				if /I "%%~nxi"=="%%~nxe" SET "PASS=1"
-			)
-		)
-		if !PASS!==1 call :_shim "!PINT_APPS_DIR!\%~1" "%%i"
+	if not defined shim exit /b 0
+
+	for /f "usebackq delims=" %%i in (`cd "!PINT_APPS_DIR!\%~1" 2^>nul ^&^& dir /b /s /a-d !shim! 2^>nul`) do (
+		call :_shim "!PINT_APPS_DIR!\%~1" "%%i"
 	)
 
 	exit /b 0
@@ -662,14 +652,18 @@ rem "Download URL" "Destination directory"
 	:_continue_curl
 
 	if defined DEST_FILE (
-		call !CURL! -o "%~2\!DEST_FILE!" "!URL:~1,-1!"
+		cmd /c "!CURL! -o "%~2\!DEST_FILE!" "!URL:~1,-1!""
 		if not errorlevel 1 exit /b 0
 	) else (
 		if not exist "%~2" mkdir "%~2"
 		pushd "%~2"
-		call !CURL! -O -J "!URL:~1,-1!"
-		popd
-		if not errorlevel 1 exit /b 0
+		cmd /c "!CURL! -O -J "!URL:~1,-1!""
+		if not errorlevel 1 (
+			popd
+			exit /b 0
+		) else (
+			popd
+		)
 	)
 
 	echo FAILED (code !ERRORLEVEL!) && echo.
@@ -723,12 +717,15 @@ rem "Executable path" "Variable name"
 	if /I not "%~x1"==".exe" exit /b 1
 	if not exist "%~1" exit /b 1
 
-	for /f "usebackq delims=" %%i in (`!POWERSHELL! -command ^"^& { (new-object -com scripting.filesystemobject^).GetFileVersion(\"%~1\"^) }^" 2^>nul`) do (
+	SET "_exefile=%~1"
+	SET "_exefile=!_exefile:\=\\!"
+
+	for /f "usebackq skip=1 delims=" %%i in (`wmic datafile where name^="!_exefile!" get version 2^>nul`) do (
 		SET "%~2=%%i"
 		exit /b 0
 	)
 
-	exit /b !ERRORLEVEL!
+	exit /b 1
 
 
 rem "INI file path" "Section" "Key" "Variable name (optional)"
@@ -813,3 +810,5 @@ rem "Application ID" "Download URL"
 	:continue_has
 	where /Q %1
 	exit /b !ERRORLEVEL!
+
+goto :eof
