@@ -22,7 +22,7 @@ set PINT_7ZA_URL="https://github.com/chocolatey/choco/raw/master/src/chocolatey.
 set PINT_XIDEL_URL="http://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel#200.9/xidel-0.9.win32.zip"
 
 rem Functions accessible directly from the command line
-SET PUBLIC_FUNCTIONS=usage self-update update subscribe subscribed install reinstall installed download remove purge upgrade search outdated web-install pin unpin
+SET PUBLIC_FUNCTIONS=usage self-update update subscribe subscribed install reinstall installed download remove purge upgrade search outdated add pin unpin
 
 SET DB_LOCAL=inifile !PINT_HISTORY_FILE!
 
@@ -69,6 +69,7 @@ rem *****************************************
 	echo Usage:
 	echo pint update^|self-update^|usage^|subscribed^|installed^|search^|outdated^|upgrade
 	echo pint download^|install^|reinstall^|installed^|search^|outdated^|upgrade^|remove^|purge^|pin^|unpin ^<package(s)^>
+	echo pint add ^<package^> ^<url^>
 	echo pint subscribe ^<packages-ini-url^>
 	exit /b 0
 
@@ -174,7 +175,7 @@ rem "INI URL"
 
 
 rem "Application ID" "File URL"
-:web-install
+:add
 	if not "%~3"=="" (
 		echo Incorrect parameters.
 		echo Use: ^<package^> "^<url^>"
@@ -259,6 +260,7 @@ rem "Application ID"
 	if not errorlevel 1 echo %~1 is unpinned.
 	exit /b !ERRORLEVEL!
 
+
 rem "Application ID"
 :_package_remove
 	call :_is_installed %1
@@ -275,7 +277,7 @@ rem "Application ID"
 :_package_purge
 	echo Removing the %~1 package...
 
-	call :remove %1
+	call :_package_remove %1
 	if exist "!PINT_DIST_DIR!\%~1" rmdir /S /Q "!PINT_DIST_DIR!\%~1"
 	call !DB_LOCAL! [%~1] /remove
 
@@ -291,8 +293,7 @@ rem "Application ID"
 	if not defined dist echo Unable to get a link for %1.&& exit /b 1
 
 	call :_url_is_updated %1 "!dist!"
-	if errorlevel 2 echo Unable to check updates for %1.&& exit /b 0
-	if errorlevel 1 echo %1 is up to date.&& exit /b 0
+	if errorlevel 1 exit /b 0
 
 	echo %1 is OUTDATED.
 	exit /b 0
@@ -347,8 +348,7 @@ rem "Application ID"
 	if not defined dist echo Unable to get a link for %1.&& exit /b 1
 
 	call :_url_is_updated %1 "!dist!"
-	if !ERRORLEVEL!==2 echo Unable to check remote file size of %1, trying to download.
-	if !ERRORLEVEL!==1 ( echo %1 is up to date.&& exit /b 0 )
+	if !ERRORLEVEL!==1 exit /b 0
 
 	call :_download_wget "!dist!" "!PINT_DIST_DIR!\%~1"
 	if errorlevel 1 (
@@ -371,9 +371,14 @@ rem "Application ID"
 	exit /b 0
 
 
-rem "Application ID" "Variable name"
+rem "Application ID" "DIST Variable name"
 :_get_dist_link
-	@endlocal
+	endlocal & (
+		SET "%~2="
+	)
+
+	SET "link="
+	SET "referer="
 
 	if "%PROCESSOR_ARCHITECTURE%"=="x86" (
 		call :_db %1 dist
@@ -385,22 +390,28 @@ rem "Application ID" "Variable name"
 
 	if not defined dist exit /b 1
 
-	if defined link if not "!link!"=="!link:/a=!" set link=!link!/resolve-uri(normalize-space(@href), base-uri())
-	if defined link set link=!link:^"=\"!
+	if defined link (
+		if not "!link!"=="!link:/a=!" SET "link=!link!/resolve-uri(normalize-space(@href), base-uri())"
+		SET link=!link:^"=\"!
+		SET referer=--referer="!dist!"
+		for /f "usebackq delims=" %%i in (`xidel "!dist!" -e "(!link:%%=%%%%!)[1]" --quiet --header="Referer: !dist!" --user-agent="!PINT_USER_AGENT!"`) do set "dist=%%i"
+	)
 
-	if defined link for /f "usebackq delims=" %%i in (`xidel "!dist!" -e "(!link:%%=%%%%!)[1]" --quiet --user-agent="!PINT_USER_AGENT!"`) do set "dist=%%i"
-
-	if "!dist!"=="" exit /b 1
+	if not defined dist exit /b 1
 
 	if not "!dist!"=="!dist:fosshub.com/=!" (
 		set dist=!dist:fosshub.com/=fosshub.com/genLink/!
 		set dist=!dist:.html/=/!
-		for /f "usebackq delims=" %%i in (`!WGET! "!dist!" -qO-`) do set "dist=%%i"
+		for /f "usebackq delims=" %%i in (`!WGET! !referer! "!dist!" -qO-`) do set "dist=%%i"
 	)
 
-	if "!dist!"=="" exit /b 1
+	if not defined dist exit /b 1
 
 	SET "dist=!dist:%%=#!"
+
+	endlocal & (
+		SET "%~2=!dist!"
+	)
 
 	exit /b 0
 
@@ -408,38 +419,43 @@ rem "Application ID" "Variable name"
 rem "Application ID" "File URL"
 :_url_is_updated
 	call :_history %1 size
-	if not defined size exit /b 0
 
-	call :_diff_remote_size "%~2" "!size!"
+	if not defined size (
+		echo %1 is not tracked by Pint, try to reinstall.
+		exit /b 2
+	)
+
+	call :_diff_remote_size %2 "!size!" %1
 	if errorlevel 1 exit /b !ERRORLEVEL!
 
 	exit /b 0
 
 
-rem "URL" "File size"
+rem "URL" "File size" "Application ID"
 :_diff_remote_size
 	SET "EXISTS="
 	SET URL=%~1
 	SET URL="!URL:#=%%!"
 
 	if not "!URL!"=="!URL:github.com/=!" (
-		if not "!URL!"=="!URL:releases/download=!" (
-			echo Checking updates via Github Releases is not supported ^(yet^).
-			exit /b 1
-		)
+		echo %3 was skipped, because checking updates at Github is not supported ^(yet^).
+		exit /b 4
 	)
 
-	cmd /c "!WGET! -S -q --spider "!URL:~1,-1!" -O - 2^>^&1" > !PINT_TEMP_FILE!
+	cmd /c "!WGET! -S --spider "!URL:~1,-1!" -O - 2>^&1" > !PINT_TEMP_FILE!
 
 	findstr /L /C:" 200 OK" !PINT_TEMP_FILE! >nul && SET EXISTS=1
 	findstr /L /C:" SIZE " !PINT_TEMP_FILE! >nul && SET EXISTS=1
-	if not defined EXISTS exit /b 2
 
-	rem NOT UPDATED
-	findstr /L /C:" %~2" !PINT_TEMP_FILE! >nul && exit /b 1
+	if not defined EXISTS (
+		echo Unable to check updates for %3.
+		exit /b 3
+	)
 
-	rem EXISTS AND UPDATED
-	exit /b 0
+	findstr /L /C:" %~2" !PINT_TEMP_FILE! >nul || exit /b 0
+
+	echo %3 is up to date.
+	exit /b 1
 	
 
 rem "Application ID"
@@ -540,21 +556,25 @@ rem "Application ID"
 
 
 rem "Application ID"
+:_app_del_shims
+	if not exist "!PINT_APPS_DIR!\%~1" exit /b 0
+	for /f "usebackq delims=" %%i in (`cd "!PINT_APPS_DIR!\%~1" 2^>nul ^&^& dir /b /s /a-d *.exe *.bat *.cmd 2^>nul`) do (
+		if exist "!PINT_APPS_DIR!\%%~ni.bat" del "!PINT_APPS_DIR!\%%~ni.bat"
+	)
+	exit /b !ERRORLEVEL!
+
+
+rem "Application ID"
 :_app_make_shims
+	if not exist "!PINT_APPS_DIR!\%~1" exit /b 0
+
+	call :_app_del_shims %1
+
 	call :_db %1 shim
 	call :_db %1 noshim
 
 	for /f "usebackq delims=" %%i in (`dir /b /s /a-d "!PINT_APPS_DIR!\%~1\*.exe" 2^>nul`) do (
 		SET "PASS=1"
-
-		call :_is_cli "%%i"
-		if errorlevel 1 SET "PASS=0"
-
-		if defined shim (
-			for %%e in (!shim!) do (
-				if /I "%%~nxi"=="%%~nxe" SET "PASS=1"
-			)
-		)
 
 		if defined noshim (
 			for %%e in (!noshim!) do (
@@ -562,16 +582,31 @@ rem "Application ID"
 			)
 		)
 
+		if not !PASS!==0 (
+			call :_is_cli "%%i"
+			if errorlevel 1 SET "PASS=0"
+		)
+
+		if defined shim (
+			for %%e in (!shim!) do (
+				if /I "%%~nxi"=="%%~nxe" SET "PASS=1"
+			)
+		)
+
+		if !PASS!==1 call :_shim "!PINT_APPS_DIR!\%~1" "%%i"
+	)
+
+	for /f "usebackq delims=" %%i in (`cd "!PINT_APPS_DIR!\%~1" 2^>nul ^&^& dir /b /s /a-d *.bat *.cmd 2^>nul`) do (
+		SET "PASS=0"
+		if defined shim (
+			for %%e in (!shim!) do (
+				if /I "%%~nxi"=="%%~nxe" SET "PASS=1"
+			)
+		)
 		if !PASS!==1 call :_shim "!PINT_APPS_DIR!\%~1" "%%i"
 	)
 
 	exit /b 0
-
-
-rem "Application ID"
-:_app_del_shims
-	forfiles /P "!PINT_APPS_DIR!\%~1" /M "*.exe" /S /C "cmd /d /c if exist "!PINT_APPS_DIR!\@fname.bat" del "!PINT_APPS_DIR!\@fname.bat"" >nul 2>&1
-	exit /b !ERRORLEVEL!
 
 
 rem "Base path" "Executable file"
@@ -658,13 +693,13 @@ rem "Download URL" "Destination directory"
 	exit /b 1
 
 
-rem "[Section]" "Key" "Variable name (optional)"
+rem "Section" "Key" "Variable name (optional)"
 :_history
 	call :_read_ini !PINT_HISTORY_FILE! %*
 	exit /b !ERRORLEVEL!
 
 
-rem "[Section]" "Key" "Variable name (optional)"
+rem "Section" "Key" "Variable name (optional)"
 :_db
 	call :_read_ini !PINT_PACKAGES_FILE_USER! %* || call :_read_ini !PINT_PACKAGES_FILE! %*
 	exit /b !ERRORLEVEL!
@@ -688,6 +723,7 @@ rem "Executable path" "Variable name"
 	@endlocal
 	SET "%~2="
 
+	if /I not "%~x1"==".exe" exit /b 1
 	if not exist "%~1" exit /b 1
 
 	for /f "usebackq delims=" %%i in (`!POWERSHELL! -command ^"^& { (new-object -com scripting.filesystemobject^).GetFileVersion(\"%~1\"^) }^" 2^>nul`) do (
@@ -698,7 +734,7 @@ rem "Executable path" "Variable name"
 	exit /b !ERRORLEVEL!
 
 
-rem "INI file path" "[Section]" "Key" "Variable name (optional)"
+rem "INI file path" "Section" "Key" "Variable name (optional)"
 :_read_ini
 	@endlocal & (
 		if not "%~3"=="" SET "%~3="
@@ -740,7 +776,12 @@ rem "INI file path" "[Section]" "Key" "Variable name (optional)"
 
 rem "Executable path"
 :_is_cli
-	!POWERSHELL! -command "& { try { $fs = [IO.File]::OpenRead((Convert-Path \"%~1\")); $br = New-Object IO.BinaryReader($fs); if ($br.ReadUInt16() -ne 23117) { exit 1 } $fs.Position = 0x3C; $fs.Position = $br.ReadUInt32(); $offset = $fs.Position; if ($br.ReadUInt32() -ne 17744) { exit 2 } $fs.Position += 0x14; switch ($br.ReadUInt16()) { 0x10B { $bit = 32 } 0x20B { $bit = 64 } } $fs.Position = $offset + 4 + 20 + 68; $subsystem = $br.ReadUInt16(); exit $subsystem }catch { $_.Exception; exit 65535 }finally { if ($br  -ne $null) { $br.Close() } if ($fs  -ne $null) { $fs.Close() } } }"
+	if /I "%~x1"==".cmd" exit /b 0
+	if /I "%~x1"==".bat" exit /b 0
+	if /I not "%~x1"==".exe" exit /b 1
+
+	!POWERSHELL! -command "& { try { $fs = [IO.File]::OpenRead((Convert-Path \"%~1\")); $br = New-Object IO.BinaryReader($fs); if ($br.ReadUInt16() -ne 23117) { exit 65533 } $fs.Position = 0x3C; $fs.Position = $br.ReadUInt32(); $offset = $fs.Position; if ($br.ReadUInt32() -ne 17744) { exit 65534 } $fs.Position += 0x14; switch ($br.ReadUInt16()) { 0x10B { $bit = 32 } 0x20B { $bit = 64 } } $fs.Position = $offset + 4 + 20 + 68; $subsystem = $br.ReadUInt16(); exit $subsystem }catch { $_.Exception; exit 65535 }finally { if ($br  -ne $null) { $br.Close() } if ($fs  -ne $null) { $fs.Close() } } }"
+
 	if !ERRORLEVEL!==3 exit /b 0
 	exit /b 1
 
