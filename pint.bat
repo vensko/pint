@@ -120,7 +120,7 @@ rem *****************************************
 
 	copy /y NUL !PINT_PACKAGES_FILE! >nul
 
-	for /f "usebackq delims=" %%f in ("!PINT_SRC_FILE:~1,-1!") do (
+	for /f "usebackq tokens=* delims=" %%f in ("!PINT_SRC_FILE:~1,-1!") do (
 		set /p ="Fetching %%f "<nul
 
 		cmd /c "!CURL! --compressed -s -S -o !PINT_TEMP_FILE! "%%f""
@@ -197,7 +197,7 @@ rem "INI URL"
 		)
 		exit /b !ERRORLEVEL!
 	)
-	for /f "usebackq delims=" %%x in (`dir /b /ad "!PINT_APPS_DIR!" 2^>nul`) do (
+	for /f "usebackq tokens=* delims=" %%x in (`dir /b /ad "!PINT_APPS_DIR!" 2^>nul`) do (
 		call :_package_outdated %%x
 	)
 	exit /b !ERRORLEVEL!
@@ -274,7 +274,7 @@ rem "Application ID" "File URL"
 		)
 		exit /b !ERRORLEVEL!
 	)
-	for /f "usebackq delims=" %%x in (`dir /b /ad "!PINT_APPS_DIR!" 2^>nul`) do (
+	for /f "usebackq tokens=* delims=" %%x in (`dir /b /ad "!PINT_APPS_DIR!" 2^>nul`) do (
 		call :_package_upgrade %%x
 	)
 	exit /b !ERRORLEVEL!
@@ -478,7 +478,7 @@ rem "Application ID" "DIST Variable name"
 		)
 		SET link=!link:^"=\"!
 		SET referer=--referer "!dist!"
-		for /f "usebackq delims=" %%i in (`xidel "!dist!" -e "(!link:%%=%%%%!)[1]" --quiet --header="Referer^: !dist!" --user-agent="!PINT_USER_AGENT!"`) do (
+		for /f "usebackq tokens=* delims=" %%i in (`xidel "!dist!" -e "(!link:%%=%%%%!)[1]" --quiet --header="Referer^: !dist!" --user-agent="!PINT_USER_AGENT!"`) do (
 			set "dist=%%i"
 		)
 	)
@@ -490,7 +490,7 @@ rem "Application ID" "DIST Variable name"
 	if not "!dist!"=="!dist:fosshub.com/=!" (
 		set dist=!dist:fosshub.com/=fosshub.com/genLink/!
 		set dist=!dist:.html/=/!
-		for /f "usebackq delims=" %%i in (`!CURL! -s !referer! "!dist!"`) do (
+		for /f "usebackq tokens=* delims=" %%i in (`!CURL! -s !referer! "!dist!"`) do (
 			set "dist=%%i"
 		)
 	)
@@ -532,11 +532,11 @@ rem "URL" "File size" "Application ID"
 
 	cmd /c "!CURL! -s -S -I "!URL:~1,-1!" -o !PINT_TEMP_FILE!"
 
-	findstr /L /C^:" 200 OK" !PINT_TEMP_FILE! >nul && (
+	findstr /L /C:" 200 OK" !PINT_TEMP_FILE! >nul && (
 		SET EXISTS=1
 	)
 
-	findstr /L /C^:" SIZE " !PINT_TEMP_FILE! >nul && (
+	findstr /L /C:" SIZE " !PINT_TEMP_FILE! >nul && (
 		SET EXISTS=1
 	)
 
@@ -545,7 +545,7 @@ rem "URL" "File size" "Application ID"
 		exit /b 3
 	)
 
-	findstr /L /C^:" %~2" !PINT_TEMP_FILE! >nul || (
+	findstr /L /C:" %~2" !PINT_TEMP_FILE! >nul || (
 		exit /b 0
 	)
 
@@ -555,7 +555,7 @@ rem "URL" "File size" "Application ID"
 
 rem "Application ID"
 :_install_app
-	for /f "usebackq delims=" %%i in (`dir /b /s /a-d "!PINT_DIST_DIR!\%~1" 2^>nul`) do (
+	for /f "usebackq tokens=* delims=" %%i in (`dir /b /s /a-d "!PINT_DIST_DIR!\%~1" 2^>nul`) do (
 		call :install_file %1 "%%i"
 	)
 	exit /b !ERRORLEVEL!
@@ -662,7 +662,7 @@ rem "Application ID"
 		exit /b 0
 	)
 
-	for /f "usebackq delims=" %%i in (`cd "!PINT_APPS_DIR!\%~1" 2^>nul ^&^& dir /b /s /a-d *.exe *.bat *.cmd 2^>nul`) do (
+	for /f "usebackq tokens=* delims=" %%i in (`cd "!PINT_APPS_DIR!\%~1" 2^>nul ^&^& dir /b /s /a-d *.exe *.bat *.cmd 2^>nul`) do (
 		if exist "!PINT_APPS_DIR!\%%~ni.bat" (
 			del "!PINT_APPS_DIR!\%%~ni.bat"
 		)
@@ -682,7 +682,7 @@ rem "Application ID"
 	call :_db %1 shim
 	call :_db %1 noshim
 
-	for /f "usebackq delims=" %%i in (`dir /b /s /a-d "!PINT_APPS_DIR!\%~1\*.exe" 2^>nul`) do (
+	for /f "usebackq tokens=* delims=" %%i in (`dir /b /s /a-d "!PINT_APPS_DIR!\%~1\*.exe" 2^>nul`) do (
 		SET "PASS=1"
 
 		if defined noshim (
@@ -709,7 +709,7 @@ rem "Application ID"
 		exit /b 0
 	)
 
-	for /f "usebackq delims=" %%i in (`cd "!PINT_APPS_DIR!\%~1" 2^>nul ^&^& dir /b /s /a-d !shim! 2^>nul`) do (
+	for /f "usebackq tokens=* delims=" %%i in (`cd "!PINT_APPS_DIR!\%~1" 2^>nul ^&^& dir /b /s /a-d !shim! 2^>nul`) do (
 		call :_shim "!PINT_APPS_DIR!\%~1" "%%i"
 	)
 
@@ -718,7 +718,7 @@ rem "Application ID"
 
 rem "Base path" "Executable file"
 :_shim
-	for /f "usebackq delims=" %%i in (`forfiles /S /P "%~1" /M "%~nx2" /C "cmd /c echo @relpath"`) do (
+	for /f "usebackq tokens=* delims=" %%i in (`forfiles /S /P "%~1" /M "%~nx2" /C "cmd /c echo @relpath"`) do (
 		SET RELPATH=%%i
 
 		if "!RELPATH:~1,1!"=="." (
@@ -749,7 +749,7 @@ rem "Download URL" "Destination directory"
 		mkdir "%~2"
 	) else (
 		if not "%~x1"=="" (
-			for /f "usebackq delims=" %%i in (`dir /b /s /a-d "%~2" 2^>nul`) do (
+			for /f "usebackq tokens=* delims=" %%i in (`dir /b /s /a-d "%~2" 2^>nul`) do (
 				if "%%~nxi"=="%~nx1" (
 					SET DEST_FILE=%%~nxi
 				)
@@ -757,7 +757,7 @@ rem "Download URL" "Destination directory"
 		)
 
 		if not defined DEST_FILE (
-			for /f "usebackq delims=" %%i in (`dir /b /s /a-d "%~2" 2^>nul`) do (
+			for /f "usebackq tokens=* delims=" %%i in (`dir /b /s /a-d "%~2" 2^>nul`) do (
 				if not defined DEST_FILE (
 					SET DEST_FILE=%%~nxi
 				) else (
@@ -841,7 +841,7 @@ rem "Section" "Key" "Variable name (optional)"
 
 rem "Application ID"
 :_app_get_version
-	for /f "usebackq delims=" %%i in (`dir /b /s /a-d /o-s "!PINT_APPS_DIR!\%~1\*.exe" 2^>nul`) do (
+	for /f "usebackq tokens=* delims=" %%i in (`dir /b /s /a-d /o-s "!PINT_APPS_DIR!\%~1\*.exe" 2^>nul`) do (
 		call :_filever "%%i" _ver
 		if defined _ver (
 			call :_write_local %1 version !_ver!
@@ -873,7 +873,7 @@ rem "Executable path" "Variable name"
 	SET "_exefile=%~1"
 	SET "_exefile=!_exefile:\=\\!"
 
-	for /f "usebackq skip=1" %%a in (`wmic datafile where name^="!_exefile!" get version 2^>nul`) do (
+	for /f "usebackq tokens=* skip=1" %%a in (`wmic datafile where name^="!_exefile!" get version 2^>nul`) do (
 		SET _ver=%%a
 
 		for %%x in (1 2 3 4) do (
@@ -1078,9 +1078,8 @@ rem "Executable path" "Subsystem variable" "Arch variable"
 	set _subsystem=
 	set _arch=
 	set "_file=%~1"
-	set "_command=!POWERSHELL! -command ^"^& { try { $fs = [IO.File]^:^:OpenRead((Convert-Path ^"$env^:_file^")); $br = New-Object IO.BinaryReader($fs); if ($br.ReadUInt16() -ne 23117) { exit 1 } $fs.Position = 0x3C; $fs.Position = $br.ReadUInt32(); $offset = $fs.Position; if ($br.ReadUInt32() -ne 17744) { exit 1 } $fs.Position += 0x14; $bit = 0; switch ($br.ReadUInt16()) { 0x10B { ^"SET _arch^=32^" } 0x20B { ^"SET _arch^=64^" } } $fs.Position = $offset + 4 + 20 + 68; $subsystem = $br.ReadUInt16(); ^"SET _subsystem^=$subsystem^"; exit 0 } catch { $_.Exception; exit 65535 } finally { if ($br  -ne $null) { $br.Close() } if ($fs  -ne $null) { $fs.Close() } } }^""
 
-	for /f "usebackq delims=" %%i in (`!_command!`) do %%i
+	for /f "usebackq tokens=* delims=" %%i in (`!POWERSHELL! -command "^& { try { $fs = [IO.File]::OpenRead((Convert-Path \"$env^:_file\")); $br = New-Object IO.BinaryReader($fs); if ($br.ReadUInt16() -ne 23117) { exit 1 } $fs.Position = 0x3C; $fs.Position = $br.ReadUInt32(); $offset = $fs.Position; if ($br.ReadUInt32() -ne 17744) { exit 1 } $fs.Position += 0x14; $bit = 0; switch ($br.ReadUInt16()) { 0x10B { \"SET _arch^=32\" } 0x20B { \"SET _arch^=64\" } } $fs.Position = $offset + 4 + 20 + 68; $subsystem = $br.ReadUInt16(); \"SET _subsystem^=$subsystem\"; exit 0 } catch { $_.Exception; exit 65535 } finally { if ($br  -ne $null) { $br.Close() } if ($fs  -ne $null) { $fs.Close() } } }"`) do %%i
 
 	endlocal & (
 		if not "%~2"=="" (
@@ -1111,7 +1110,7 @@ rem "Application ID" "Download URL"
 
 	call :_download_ps "%~2" "!PINT_DIST_DIR!\%~1"
 
-	for /f "usebackq delims=" %%i in (`dir /b /s /a-d "!PINT_DIST_DIR!\%~1\*" 2^>nul`) do (
+	for /f "usebackq tokens=* delims=" %%i in (`dir /b /s /a-d "!PINT_DIST_DIR!\%~1\*" 2^>nul`) do (
 		call :install_file %1 "%%i"
 		goto :continue_has
 	)
