@@ -16,8 +16,8 @@ if not defined PINT_HISTORY_FILE set PINT_HISTORY_FILE="%~dp0local.ini"
 rem Hardcoded URLs
 set PINT_DEFAULT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini
 set PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.bat
-set PINT_WGET_URL="https://eternallybored.org/misc/wget/current/wget.exe"
 set PINT_INIFILE_URL="http://www.horstmuc.de/win/inifile.zip"
+set PINT_CURL_URL="https://bintray.com/artifact/download/vszakats/generic/curl-7.48.0-win32-mingw.7z"
 set PINT_7ZA_URL="https://github.com/chocolatey/choco/raw/master/src/chocolatey.resources/tools/7za.exe"
 set PINT_XIDEL_URL="http://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel#200.9/xidel-0.9.win32.zip"
 
@@ -26,7 +26,7 @@ SET PUBLIC_FUNCTIONS=usage self-update update subscribe subscribed install reins
 
 SET DB_LOCAL=inifile !PINT_HISTORY_FILE!
 
-SET WGET=wget -t 2 --retry-connrefused --no-check-certificate --content-disposition
+SET CURL=curl --insecure --ssl-no-revoke --ssl-allow-beast --progress-bar --remote-header-name --location --max-redirs 5 --retry 2 --retry-delay 1 -X GET
 SET POWERSHELL=powershell -NonInteractive -NoProfile -executionpolicy bypass
 
 rem Create directories if needed
@@ -38,7 +38,7 @@ path !PINT_APPS_DIR!;%PATH%
 
 rem Validate the environment and install missing tools
 call :_has inifile !PINT_INIFILE_URL! || echo Unable to find inifile && exit /b 1
-call :_has wget    !PINT_WGET_URL!    || echo Unable to find Wget    && exit /b 1
+call :_has curl    !PINT_CURL_URL!    || echo Unable to find Wget    && exit /b 1
 call :_has 7za     !PINT_7ZA_URL!     || echo Unable to find 7za     && exit /b 1
 call :_has xidel   !PINT_XIDEL_URL!   || echo Unable to find Xidel   && exit /b 1
 
@@ -79,7 +79,7 @@ rem *****************************************
 
 	if exist !PINT_TEMP_FILE! del !PINT_TEMP_FILE!
 
-	cmd /c "!WGET! -qO- "!PINT_SELF_URL!""> !PINT_TEMP_FILE!
+	call !CURL! -s -S -o !PINT_TEMP_FILE! "!PINT_SELF_URL!"
 
 	if errorlevel 1 (
 		echo Self-update failed^^!
@@ -108,7 +108,7 @@ rem *****************************************
 	for /f "usebackq delims=" %%f in ("!PINT_SRC_FILE:~1,-1!") do (
 		set /p ="Fetching %%f "<nul
 
-		cmd /c "!WGET! -qO- "%%f""> !PINT_TEMP_FILE!
+		call !CURL! --compressed -s -S -o !PINT_TEMP_FILE! "%%f"
 
 		if errorlevel 1 (
 			echo - failed^^!
@@ -192,7 +192,7 @@ rem "Application ID" "File URL"
 		if /I not "!CONFIRMED!"=="Y" exit /b 1
 	)
 
-	call :_download_wget "%~2" "!PINT_DIST_DIR!\%~1"
+	call :_curl "%~2" "!PINT_DIST_DIR!\%~1"
 	if errorlevel 1 echo Unable to download %1 from %~2.&& exit /b 1
 
 	call :_install_app %1
@@ -304,7 +304,7 @@ rem "Application ID" "Update"
 	call :_get_dist_link %1 dist
 	if not defined dist echo Unable to get a link for %1.&& exit /b 1
 
-	call :_download_wget "!dist!" "!PINT_DIST_DIR!\%~1"
+	call :_curl "!dist!" "!PINT_DIST_DIR!\%~1"
 	if errorlevel 1 echo Unable to download an update for %1.&& exit /b 1
 
 	exit /b !ERRORLEVEL!
@@ -319,7 +319,7 @@ rem "Application ID" "Update"
 	call :_get_dist_link %1 dist
 	if not defined dist echo Unable to get a link for %1.&& exit /b 1
 
-	call :_download_wget "!dist!" "!PINT_DIST_DIR!\%~1"
+	call :_curl "!dist!" "!PINT_DIST_DIR!\%~1"
 	if errorlevel 1 echo Unable to download %1.&& exit /b 1
 
 	call :_install_app %1
@@ -350,7 +350,7 @@ rem "Application ID"
 	call :_url_is_updated %1 "!dist!"
 	if !ERRORLEVEL!==1 exit /b 0
 
-	call :_download_wget "!dist!" "!PINT_DIST_DIR!\%~1"
+	call :_curl "!dist!" "!PINT_DIST_DIR!\%~1"
 	if errorlevel 1 (
 		echo Unable to download an update for %1.
 		exit /b 1
@@ -393,7 +393,7 @@ rem "Application ID" "DIST Variable name"
 	if defined link (
 		if not "!link!"=="!link:/a=!" SET "link=!link!/resolve-uri(normalize-space(@href), base-uri())"
 		SET link=!link:^"=\"!
-		SET referer=--referer="!dist!"
+		SET referer=--referer "!dist!"
 		for /f "usebackq delims=" %%i in (`xidel "!dist!" -e "(!link:%%=%%%%!)[1]" --quiet --header="Referer: !dist!" --user-agent="!PINT_USER_AGENT!"`) do set "dist=%%i"
 	)
 
@@ -402,7 +402,7 @@ rem "Application ID" "DIST Variable name"
 	if not "!dist!"=="!dist:fosshub.com/=!" (
 		set dist=!dist:fosshub.com/=fosshub.com/genLink/!
 		set dist=!dist:.html/=/!
-		for /f "usebackq delims=" %%i in (`!WGET! !referer! "!dist!" -qO-`) do set "dist=%%i"
+		for /f "usebackq delims=" %%i in (`!CURL! -s !referer! "!dist!"`) do set "dist=%%i"
 	)
 
 	if not defined dist exit /b 1
@@ -437,12 +437,7 @@ rem "URL" "File size" "Application ID"
 	SET URL=%~1
 	SET URL="!URL:#=%%!"
 
-	if not "!URL!"=="!URL:github.com/=!" (
-		echo %3 was skipped, because checking updates at Github is not supported ^(yet^).
-		exit /b 4
-	)
-
-	cmd /c "!WGET! -S --spider "!URL:~1,-1!" -O - 2>^&1" > !PINT_TEMP_FILE!
+	call !CURL! -s -S -I "!URL:~1,-1!" -o !PINT_TEMP_FILE!
 
 	findstr /L /C:" 200 OK" !PINT_TEMP_FILE! >nul && SET EXISTS=1
 	findstr /L /C:" SIZE " !PINT_TEMP_FILE! >nul && SET EXISTS=1
@@ -477,7 +472,6 @@ rem "Application ID" "File path"
 		call :_db %1 type || SET "type=%~x2" && SET "type=!type:~1!"
 
 		if /I "%~1"=="7za" set "type=standalone"
-		if /I "%~1"=="wget" set "type=standalone"
 
 		if /I !type!==standalone (
 			copy /Y %2 /B "!DEST!" >nul
@@ -583,8 +577,8 @@ rem "Application ID"
 		)
 
 		if not !PASS!==0 (
-			call :_is_cli "%%i"
-			if errorlevel 1 SET "PASS=0"
+			call :_exetype "%%i" _subsystem
+			if not !_subsystem!==3 SET "PASS=0"
 		)
 
 		if defined shim (
@@ -628,7 +622,7 @@ rem "Base path" "Executable file"
 
 
 rem "Download URL" "Destination directory"
-:_download_wget
+:_curl
 	SET "DEST_FILE="
 	SET URL="%~1"
 	SET "URL=!URL:#=%%!"
@@ -653,7 +647,7 @@ rem "Download URL" "Destination directory"
 				) else (
 					SET DEST_FILE=
 					rmdir /S /Q "%~2"
-					goto :_continue_download_wget
+					goto :_continue_curl
 				)
 			)
 		)
@@ -665,13 +659,16 @@ rem "Download URL" "Destination directory"
 		)
 	)
 
-	:_continue_download_wget
+	:_continue_curl
 
 	if defined DEST_FILE (
-		cmd /c "!WGET! -N -q -O "%~2\!DEST_FILE!" "!URL:~1,-1!""
+		call !CURL! -o "%~2\!DEST_FILE!" "!URL:~1,-1!"
 		if not errorlevel 1 exit /b 0
 	) else (
-		cmd /c "!WGET! -N -q --directory-prefix="%~2" "!URL:~1,-1!""
+		if not exist "%~2" mkdir "%~2"
+		pushd "%~2"
+		call !CURL! -O -J "!URL:~1,-1!"
+		popd
 		if not errorlevel 1 exit /b 0
 	)
 
@@ -774,13 +771,26 @@ rem "INI file path" "Section" "Key" "Variable name (optional)"
 	exit /b 1
 
 
-rem "Executable path"
-:_is_cli
+rem "Executable path" "Subsystem variable" "Arch variable"
+:_exetype
+	endlocal & (
+		if not "%~2"=="" SET "%~2="
+		if not "%~3"=="" SET "%~3="
+	)
+
 	if /I "%~x1"==".cmd" exit /b 0
 	if /I "%~x1"==".bat" exit /b 0
 	if /I not "%~x1"==".exe" exit /b 1
 
-	!POWERSHELL! -command "& { try { $fs = [IO.File]::OpenRead((Convert-Path \"%~1\")); $br = New-Object IO.BinaryReader($fs); if ($br.ReadUInt16() -ne 23117) { exit 65533 } $fs.Position = 0x3C; $fs.Position = $br.ReadUInt32(); $offset = $fs.Position; if ($br.ReadUInt32() -ne 17744) { exit 65534 } $fs.Position += 0x14; switch ($br.ReadUInt16()) { 0x10B { $bit = 32 } 0x20B { $bit = 64 } } $fs.Position = $offset + 4 + 20 + 68; $subsystem = $br.ReadUInt16(); exit $subsystem }catch { $_.Exception; exit 65535 }finally { if ($br  -ne $null) { $br.Close() } if ($fs  -ne $null) { $fs.Close() } } }"
+	set _subsystem=
+	set _arch=
+
+	for /f "usebackq delims=" %%i in (`!POWERSHELL! -command "^& { try { $fs = [IO.File]::OpenRead((Convert-Path \"%~1\")); $br = New-Object IO.BinaryReader($fs); if ($br.ReadUInt16() -ne 23117) { exit 1 } $fs.Position = 0x3C; $fs.Position = $br.ReadUInt32(); $offset = $fs.Position; if ($br.ReadUInt32() -ne 17744) { exit 1 } $fs.Position += 0x14; $bit = 0; switch ($br.ReadUInt16()) { 0x10B { \"SET _arch^=32\" } 0x20B { \"SET _arch^=64\" } } $fs.Position = $offset + 4 + 20 + 68; $subsystem = $br.ReadUInt16(); \"SET _subsystem^=$subsystem\"; exit 0 } catch { $_.Exception; exit 65535 } finally { if ($br  -ne $null) { $br.Close() } if ($fs  -ne $null) { $fs.Close() } } }"`) do %%i
+
+	endlocal & (
+		if not "%~2"=="" SET "%~2=!_subsystem!"
+		if not "%~3"=="" SET "%~3=!_arch!"
+	)
 
 	if !ERRORLEVEL!==3 exit /b 0
 	exit /b 1
