@@ -3,6 +3,11 @@
 
 rem PINT - Portable INsTaller
 
+if "%~1"=="" (
+	call :usage
+	exit /b 0
+)
+
 rem Set variables if they weren't overriden earlier
 if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0packages"
 if not defined PINT_APPS_DIR set "PINT_APPS_DIR=%~dp0apps"
@@ -14,46 +19,56 @@ if not defined PINT_TEMP_FILE set PINT_TEMP_FILE="%TEMP%\pint.tmp"
 if not defined PINT_HISTORY_FILE set PINT_HISTORY_FILE="%~dp0local.ini"
 
 rem Hardcoded URLs
-set PINT_DEFAULT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini
-set PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.bat
-set PINT_INIFILE_URL="http://www.horstmuc.de/win/inifile.zip"
-set PINT_CURL_URL="https://bintray.com/artifact/download/vszakats/generic/curl-7.48.0-win32-mingw.7z"
-set PINT_7ZA_URL="https://github.com/chocolatey/choco/raw/master/src/chocolatey.resources/tools/7za.exe"
-set PINT_XIDEL_URL="http://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel#200.9/xidel-0.9.win32.zip"
+set PINT_DEFAULT_PACKAGES=https^://raw.githubusercontent.com/vensko/pint/master/packages.ini
+set PINT_SELF_URL=https^://raw.githubusercontent.com/vensko/pint/master/pint.bat
+set PINT_CURL_URL="https^://bintray.com/artifact/download/vszakats/generic/curl-7.48.0-win32-mingw.7z"
+set PINT_XIDEL_URL="http^://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel#200.9/xidel-0.9.win32.zip"
 
 rem Functions accessible directly from the command line
-SET PUBLIC_FUNCTIONS=usage self-update update subscribe subscribed install reinstall installed download remove purge upgrade search outdated add pin unpin
-
-SET DB_LOCAL=inifile !PINT_HISTORY_FILE!
+SET PUBLIC_FUNCTIONS=usage self-update update subscribe subscribed install reinstall installed download remove purge upgrade search outdated add pin unpin _write_ini _exetype
 
 SET CURL=curl --insecure --ssl-no-revoke --ssl-allow-beast --progress-bar --remote-header-name --location --max-redirs 5 --retry 2 --retry-delay 1 -X GET
 SET POWERSHELL=powershell -NonInteractive -NoLogo -NoProfile -executionpolicy bypass
 
 rem Create directories if needed
-if not exist "!PINT_APPS_DIR!" mkdir "!PINT_APPS_DIR!"
-if not exist !PINT_HISTORY_FILE! copy /y NUL !PINT_HISTORY_FILE! >NUL
+if not exist "!PINT_APPS_DIR!" (
+	mkdir "!PINT_APPS_DIR!"
+)
+
+if not exist !PINT_HISTORY_FILE! (
+	copy /y NUL !PINT_HISTORY_FILE! >NUL
+)
 
 SET PINT="%~f0"
 path !PINT_APPS_DIR!;%PATH%
 
 rem Validate the environment and install missing tools
-call :_has inifile !PINT_INIFILE_URL! || echo Unable to find inifile && exit /b 1
-call :_has curl    !PINT_CURL_URL!    || echo Unable to find Wget    && exit /b 1
-call :_has 7za     !PINT_7ZA_URL!     || echo Unable to find 7za     && exit /b 1
-call :_has xidel   !PINT_XIDEL_URL!   || echo Unable to find Xidel   && exit /b 1
+call :_has curl !PINT_CURL_URL! || (
+	echo Unable to find curl
+	exit /b 1
+)
+call :_has xidel !PINT_XIDEL_URL! || (
+	echo Unable to find Xidel
+	exit /b 1
+)
+
+if not %1==update (
+	if not exist !PINT_PACKAGES_FILE! (
+		call :update
+	)
+)
 
 rem Ready, steady, go
-if "%~1"=="" call :usage & exit /b 0
-
-if not %1==update if not exist !PINT_PACKAGES_FILE! call :update
-
 for %%x in (!PUBLIC_FUNCTIONS!) do (
 	if %1==%%x (
 		call :%*
-		if exist !PINT_TEMP_FILE! del !PINT_TEMP_FILE!
+		if exist !PINT_TEMP_FILE! (
+			del !PINT_TEMP_FILE!
+		)
 		exit /b
 	)
 )
+
 echo Unknown command
 exit /b 1
 
@@ -66,7 +81,7 @@ rem *****************************************
 :usage
 	echo PINT - Portable INsTaller
 	echo.
-	echo Usage:
+	echo Usage^:
 	echo pint update^|self-update^|usage^|subscribed^|installed^|search^|outdated^|upgrade
 	echo pint download^|install^|reinstall^|installed^|search^|outdated^|upgrade^|remove^|purge^|pin^|unpin ^<package(s)^>
 	echo pint add ^<package^> ^<url^>
@@ -77,33 +92,33 @@ rem *****************************************
 :self-update
 	echo Fetching !PINT_SELF_URL!
 
-	if exist !PINT_TEMP_FILE! del !PINT_TEMP_FILE!
+	if exist !PINT_TEMP_FILE! (
+		del !PINT_TEMP_FILE!
+	)
 
-	cmd /c "!CURL! -s -S -o !PINT_TEMP_FILE! "!PINT_SELF_URL!""
-
-	if errorlevel 1 (
+	cmd /c "!CURL! -s -S -o !PINT_TEMP_FILE! "!PINT_SELF_URL!"" || (
 		echo Self-update failed^^!
 		exit /b 1
-	) else (
-		findstr /L /C:"PINT - Portable INsTaller" !PINT_TEMP_FILE! >nul
-
-		if errorlevel 1 (
-			echo Self-update failed^^!
-			exit /b 1
-		) else (
-			type !PINT_TEMP_FILE! > !PINT!
-			echo Pint was updated to the latest version.
-			exit /b 0
-		)
 	)
+
+	findstr /L /C:"PINT - Portable INsTaller" !PINT_TEMP_FILE! >nul || (
+		echo Self-update failed^^!
+		exit /b 1
+	)
+
+	(type !PINT_TEMP_FILE!) > !PINT!
+	echo Pint was updated to the latest version.
+	exit /b 0
 
 
 :update
 	SET /a SRC_COUNT=0
 
-	if not exist !PINT_SRC_FILE! echo !PINT_DEFAULT_PACKAGES!> !PINT_SRC_FILE!
+	if not exist !PINT_SRC_FILE! (
+		(echo !PINT_DEFAULT_PACKAGES!) > !PINT_SRC_FILE!
+	)
 
-	copy /y NUL !PINT_PACKAGES_FILE! >NUL
+	copy /y NUL !PINT_PACKAGES_FILE! >nul
 
 	for /f "usebackq delims=" %%f in ("!PINT_SRC_FILE:~1,-1!") do (
 		set /p ="Fetching %%f "<nul
@@ -113,14 +128,17 @@ rem *****************************************
 		if errorlevel 1 (
 			echo - failed^^!
 		) else (
-			type !PINT_TEMP_FILE! >> !PINT_PACKAGES_FILE!
+			(type !PINT_TEMP_FILE!) >> !PINT_PACKAGES_FILE!
 			SET /a SRC_COUNT+=1
 			echo.
 		)
 	)
 
 	set /p ="Merged !SRC_COUNT! source"<nul
-	if not !SRC_COUNT!==1 echo s
+
+	if not !SRC_COUNT!==1 (
+		echo s
+	)
 
 	exit /b 0
 
@@ -132,8 +150,12 @@ rem *****************************************
 
 rem "Term"
 :search
-	if not exist !PINT_PACKAGES_FILE! call :update
-	if exist !PINT_PACKAGES_FILE_USER! findstr /I /R "^^\[.*%~1" !PINT_PACKAGES_FILE_USER! | sort
+	if not exist !PINT_PACKAGES_FILE! (
+		call :update
+	)
+	if exist !PINT_PACKAGES_FILE_USER! (
+		findstr /I /R "^^\[.*%~1" !PINT_PACKAGES_FILE_USER! | sort
+	)
 	findstr /I /R "^^\[.*%~1" !PINT_PACKAGES_FILE! | sort
 	exit /b 0
 
@@ -141,8 +163,11 @@ rem "Term"
 rem "INI URL"
 :subscribe
 	SET URL="%~1"
-	call findstr /L /X !URL! !PINT_SRC_FILE! >nul && echo This URL is already registered. && exit /b 1
-	>>!PINT_SRC_FILE! echo !URL:~1,-1!
+	findstr /L /X !URL! !PINT_SRC_FILE! >nul && (
+		echo This URL is already registered.
+		exit /b 1
+	)
+	(echo !URL:~1,-1!) >> !PINT_SRC_FILE!
 	echo Registered !URL:~1,-1!
 	exit /b 0
 
@@ -167,10 +192,14 @@ rem "INI URL"
 
 :outdated
 	if not "%*"=="" (
-		for %%x in (%*) do call :_package_outdated %%x
+		for %%x in (%*) do (
+			call :_package_outdated %%x
+		)
 		exit /b !ERRORLEVEL!
 	)
-	for /f "usebackq delims=" %%x in (`dir /b /ad "!PINT_APPS_DIR!" 2^>nul`) do call :_package_outdated %%x
+	for /f "usebackq delims=" %%x in (`dir /b /ad "!PINT_APPS_DIR!" 2^>nul`) do (
+		call :_package_outdated %%x
+	)
 	exit /b !ERRORLEVEL!
 
 
@@ -178,28 +207,37 @@ rem "Application ID" "File URL"
 :add
 	if not "%~3"=="" (
 		echo Incorrect parameters.
-		echo Use: ^<package^> "^<url^>"
+		echo Use^: ^<package^> "^<url^>"
 		exit /b 1
 	)
 
-	call :_is_upgradable || exit /b 1
-
-	call :_db %1 dist
-
-	if defined dist (
-		echo %~1 is present in a remote database.
-		SET /P "CONFIRMED=Do you want to add this URL as a permanent source into the user configuration? [Y/N] "
-		if /I not "!CONFIRMED!"=="Y" exit /b 1
+	call :_is_upgradable || (
+		exit /b 1
 	)
 
-	call :_curl "%~2" "!PINT_DIST_DIR!\%~1"
-	if errorlevel 1 echo Unable to download %1 from %~2.&& exit /b 1
+	call :_read_ini !PINT_PACKAGES_FILE! %1 dist && (
+		echo %~1 is present in a remote database.
+		SET /P "CONFIRMED=Do you want to add this URL as a permanent source into the user configuration? [Y/N] "
+		if /I not "!CONFIRMED!"=="Y" (
+			exit /b 1
+		)
+	)
 
-	call :_install_app %1
+	call :_read_ini !PINT_PACKAGES_FILE_USER! %1 dist && (
+		echo %~1 is present in the user database.
+		SET /P "CONFIRMED=Do you want to set this URL as a new permanent source? [Y/N] "
+		if /I not "!CONFIRMED!"=="Y" (
+			exit /b 1
+		)
+	)
 
-	if not errorlevel 1 (
-		if not exist !PINT_PACKAGES_FILE_USER! copy /y NUL !PINT_PACKAGES_FILE_USER! >NUL
-		call inifile !PINT_PACKAGES_FILE_USER! [%~1] "dist=%~2"
+	call :_curl "%~2" "!PINT_DIST_DIR!\%~1" || (
+		echo Unable to download %1 from %~2.
+		exit /b 1
+	)
+
+	call :_install_app %1 && (
+		call :_write_ini !PINT_PACKAGES_FILE_USER! %1 dist %2
 	)
 
 	exit /b !ERRORLEVEL!
@@ -231,45 +269,54 @@ rem "Application ID" "File URL"
 
 :upgrade
 	if not "%~1"=="" (
-		for %%x in (%*) do call :_package_upgrade %%x
+		for %%x in (%*) do (
+			call :_package_upgrade %%x
+		)
 		exit /b !ERRORLEVEL!
 	)
-
-	for /f "usebackq delims=" %%x in (`dir /b /ad "!PINT_APPS_DIR!" 2^>nul`) do call :_package_upgrade %%x
+	for /f "usebackq delims=" %%x in (`dir /b /ad "!PINT_APPS_DIR!" 2^>nul`) do (
+		call :_package_upgrade %%x
+	)
 	exit /b !ERRORLEVEL!
 
 :purge
 	if "%~1"=="" (
-		if exist "!PINT_DIST_DIR!" rmdir /S /Q "!PINT_DIST_DIR!"
+		if exist "!PINT_DIST_DIR!" (
+			rmdir /S /Q "!PINT_DIST_DIR!"
+		)
 		exit /b 0
 	)
 
-	for %%x in (%*) do call :_package_purge %%x
+	for %%x in (%*) do (
+		call :_package_purge %%x
+	)
 	exit /b !ERRORLEVEL!
 
 
 rem "Application ID"
 :_package_pin
-	call !DB_LOCAL! [%~1] "pinned=1"
-	if not errorlevel 1 echo %~1 is pinned.
+	call :_write_local %1 pinned 1 && (
+		echo %~1 is pinned.
+	)
 	exit /b !ERRORLEVEL!
 
 rem "Application ID"
 :_package_unpin
-	call !DB_LOCAL! [%~1] "pinned="
-	if not errorlevel 1 echo %~1 is unpinned.
+	call :_write_local %1 pinned && (
+		echo %~1 is unpinned.
+	)
 	exit /b !ERRORLEVEL!
 
 
 rem "Application ID"
 :_package_remove
-	call :_is_installed %1
-	if not errorlevel 1 echo Uninstalling %~1...
-
+	call :_is_installed %1 && (
+		echo Uninstalling %~1...
+	)
 	call :_app_del_shims %1
-	if exist "!PINT_APPS_DIR!\%~1" rmdir /S /Q "!PINT_APPS_DIR!\%~1"
-	call !DB_LOCAL! [%~1] ts_setup=
-
+	if exist "!PINT_APPS_DIR!\%~1" (
+		rmdir /S /Q "!PINT_APPS_DIR!\%~1"
+	)
 	exit /b 0
 
 
@@ -278,22 +325,29 @@ rem "Application ID"
 	echo Removing the %~1 package...
 
 	call :_package_remove %1
-	if exist "!PINT_DIST_DIR!\%~1" rmdir /S /Q "!PINT_DIST_DIR!\%~1"
-	call !DB_LOCAL! [%~1] /remove
+	if exist "!PINT_DIST_DIR!\%~1" (
+		rmdir /S /Q "!PINT_DIST_DIR!\%~1"
+	)
+	call :_write_local %1
 
 	exit /b 0
 
 
 rem "Application ID"
 :_package_outdated
-	call :_is_installed %1
-	if errorlevel 1 echo %1 is not installed.&& exit /b 1
+	call :_is_installed %1 || (
+		echo %1 is not installed.
+		exit /b 1
+	)
 
-	call :_get_dist_link %1 dist
-	if not defined dist echo Unable to get a link for %1.&& exit /b 1
+	call :_get_dist_link %1 dist || (
+		echo Unable to get a link for %1.
+		exit /b 1
+	)
 
-	call :_url_is_updated %1 "!dist!"
-	if errorlevel 1 exit /b 0
+	call :_url_is_updated %1 "!dist!" || (
+		exit /b 1
+	)
 
 	echo %1 is OUTDATED.
 	exit /b 0
@@ -301,26 +355,37 @@ rem "Application ID"
 
 rem "Application ID" "Update"
 :_package_download
-	call :_get_dist_link %1 dist
-	if not defined dist echo Unable to get a link for %1.&& exit /b 1
-
-	call :_curl "!dist!" "!PINT_DIST_DIR!\%~1"
-	if errorlevel 1 echo Unable to download an update for %1.&& exit /b 1
-
-	exit /b !ERRORLEVEL!
+	call :_get_dist_link %1 dist || (
+		echo Unable to get a link for %1.
+		exit /b 1
+	)
+	call :_curl "!dist!" "!PINT_DIST_DIR!\%~1" || (
+		echo Unable to download an update for %1.
+		exit /b 1
+	)
+	exit /b 0
 
 
 :_package_force_install
-	call :_is_upgradable || exit /b 1
+	call :_is_upgradable || (
+		exit /b 1
+	)
 
-	call :_db %1 deps
-	if defined deps for %%x in (!deps!) do call :_package_install %%x
+	call :_db %1 deps && (
+		for %%x in (!deps!) do (
+			call :_package_install %%x
+		)
+	)
 
-	call :_get_dist_link %1 dist
-	if not defined dist echo Unable to get a link for %1.&& exit /b 1
+	call :_get_dist_link %1 dist || (
+		echo Unable to get a link for %1.
+		exit /b 1
+	)
 
-	call :_curl "!dist!" "!PINT_DIST_DIR!\%~1"
-	if errorlevel 1 echo Unable to download %1.&& exit /b 1
+	call :_curl "!dist!" "!PINT_DIST_DIR!\%~1" || (
+		echo Unable to download %1.
+		exit /b 1
+	)
 
 	call :_install_app %1
 	exit /b !ERRORLEVEL!
@@ -328,30 +393,42 @@ rem "Application ID" "Update"
 
 rem "Application ID"
 :_package_install
-	call :_is_installed %~1 && echo %~1 is already installed.&& exit /b 0
+	call :_is_installed %1 && (
+		echo %~1 is already installed.
+		exit /b 0
+	)
 	call :_package_force_install %1
 	exit /b !ERRORLEVEL!
 
 
 rem "Application ID"
 :_package_upgrade
-	call :_is_installed %1
-	if errorlevel 1 ( call :_package_install %1 & exit /b !ERRORLEVEL! )
+	call :_is_installed %1 || (
+		call :_package_install %1
+		exit /b !ERRORLEVEL!
+	)
 
-	call :_is_upgradable %1
-	if errorlevel 1 exit /b 1
+	call :_is_upgradable %1 || (
+		exit /b 1
+	)
 
-	call :_db %1 deps
-	if defined deps for %%x in (!deps!) do call :_package_upgrade "%%x"
+	call :_db %1 deps && (
+		for %%x in (!deps!) do (
+			call :_package_upgrade "%%x"
+		)
+	)
 
-	call :_get_dist_link %1 dist
-	if not defined dist echo Unable to get a link for %1.&& exit /b 1
+	call :_get_dist_link %1 dist || (
+		echo Unable to get a link for %1.
+		exit /b 1
+	)
 
 	call :_url_is_updated %1 "!dist!"
-	if !ERRORLEVEL!==1 exit /b 0
+	if !ERRORLEVEL!==1 (
+		exit /b 0
+	)
 
-	call :_curl "!dist!" "!PINT_DIST_DIR!\%~1"
-	if errorlevel 1 (
+	call :_curl "!dist!" "!PINT_DIST_DIR!\%~1" || (
 		echo Unable to download an update for %1.
 		exit /b 1
 	)
@@ -364,8 +441,7 @@ rem "Application ID"
 :_is_upgradable
 	call :_history %1 pinned
 	if defined pinned (
-		echo Updates for %~1 are suppressed. To allow this install, use:
-		echo pint unpin %~1
+		echo Updates for %~1 are suppressed. To allow this install, use^: pint unpin %~1
 		exit /b 1
 	)
 	exit /b 0
@@ -384,28 +460,44 @@ rem "Application ID" "DIST Variable name"
 		call :_db %1 dist
 		call :_db %1 link
 	) else (
-		call :_db %1 dist64 dist || call :_db %1 dist
-		call :_db %1 link64 link || call :_db %1 link
+		call :_db %1 dist64 dist || (
+			call :_db %1 dist
+		)
+		call :_db %1 link64 link || (
+			call :_db %1 link
+		)
 	)
 
-	if not defined dist exit /b 1
+	if not defined dist (
+		exit /b 1
+	)
 
 	if defined link (
-		if not "!link!"=="!link:/a=!" SET "link=!link!/resolve-uri(normalize-space(@href), base-uri())"
+		if not "!link!"=="!link:/a=!" (
+			SET "link=!link!/resolve-uri(normalize-space(@href), base-uri())"
+		)
 		SET link=!link:^"=\"!
 		SET referer=--referer "!dist!"
-		for /f "usebackq delims=" %%i in (`xidel "!dist!" -e "(!link:%%=%%%%!)[1]" --quiet --header="Referer: !dist!" --user-agent="!PINT_USER_AGENT!"`) do set "dist=%%i"
+		for /f "usebackq delims=" %%i in (`xidel "!dist!" -e "(!link:%%=%%%%!)[1]" --quiet --header="Referer^: !dist!" --user-agent="!PINT_USER_AGENT!"`) do (
+			set "dist=%%i"
+		)
 	)
 
-	if not defined dist exit /b 1
+	if not defined dist (
+		exit /b 1
+	)
 
 	if not "!dist!"=="!dist:fosshub.com/=!" (
 		set dist=!dist:fosshub.com/=fosshub.com/genLink/!
 		set dist=!dist:.html/=/!
-		for /f "usebackq delims=" %%i in (`!CURL! -s !referer! "!dist!"`) do set "dist=%%i"
+		for /f "usebackq delims=" %%i in (`!CURL! -s !referer! "!dist!"`) do (
+			set "dist=%%i"
+		)
 	)
 
-	if not defined dist exit /b 1
+	if not defined dist (
+		exit /b 1
+	)
 
 	SET "dist=!dist:%%=#!"
 
@@ -425,29 +517,37 @@ rem "Application ID" "File URL"
 		exit /b 2
 	)
 
-	call :_diff_remote_size %2 "!size!" %1
-	if errorlevel 1 exit /b !ERRORLEVEL!
+	call :_diff_size %2 "!size!" %1 || (
+		exit /b !ERRORLEVEL!
+	)
 
 	exit /b 0
 
 
 rem "URL" "File size" "Application ID"
-:_diff_remote_size
+:_diff_size
 	SET "EXISTS="
 	SET URL=%~1
 	SET URL="!URL:#=%%!"
 
 	cmd /c "!CURL! -s -S -I "!URL:~1,-1!" -o !PINT_TEMP_FILE!"
 
-	findstr /L /C:" 200 OK" !PINT_TEMP_FILE! >nul && SET EXISTS=1
-	findstr /L /C:" SIZE " !PINT_TEMP_FILE! >nul && SET EXISTS=1
+	findstr /L /C^:" 200 OK" !PINT_TEMP_FILE! >nul && (
+		SET EXISTS=1
+	)
+
+	findstr /L /C^:" SIZE " !PINT_TEMP_FILE! >nul && (
+		SET EXISTS=1
+	)
 
 	if not defined EXISTS (
 		echo Unable to check updates for %3.
 		exit /b 3
 	)
 
-	findstr /L /C:" %~2" !PINT_TEMP_FILE! >nul || exit /b 0
+	findstr /L /C^:" %~2" !PINT_TEMP_FILE! >nul || (
+		exit /b 0
+	)
 
 	echo %3 is up to date.
 	exit /b 1
@@ -455,39 +555,39 @@ rem "URL" "File size" "Application ID"
 
 rem "Application ID"
 :_install_app
-	for /f "usebackq delims=" %%i in (`dir /b /s /a-d "!PINT_DIST_DIR!\%~1" 2^>nul`) do call :install_file %1 "%%i"
+	for /f "usebackq delims=" %%i in (`dir /b /s /a-d "!PINT_DIST_DIR!\%~1" 2^>nul`) do (
+		call :install_file %1 "%%i"
+	)
 	exit /b !ERRORLEVEL!
 
 
 rem "Application ID" "File path"
 :install_file
 	set "DEST=!PINT_APPS_DIR!\%~1"
-	if not exist "!DEST!" mkdir "!DEST!"
+
+	if not exist "!DEST!" (
+		mkdir "!DEST!"
+	)
 
 	echo Installing %~1 to !DEST!
 
 	if /I "%~x2"==".msi" (
-		msiexec /a %2 /norestart /qn TARGETDIR="!DEST!"
+		call msiexec /a %2 /norestart /qn TARGETDIR="!DEST!"
 	) else (
-		call :_db %1 type || SET "type=%~x2" && SET "type=!type:~1!"
-
-		if /I "%~1"=="7za" set "type=standalone"
-
-		if /I !type!==standalone (
-			copy /Y %2 /B "!DEST!" >nul
+		if /I "%~x2"==".zip" (
+			call :_unzip %2 "!DEST!"
 		) else (
-			if /I !type!==zip (
-				call :_unzip %2 "!DEST!"
+			call :_db %1 type
+			if /I !type!==standalone (
+				copy /Y %2 /B "!DEST!" >nul
 			) else (
-				if /I !type!==rar (
-					where /Q unrar || call :_package_install unrar
-					unrar x -u -inul %2 "!DEST!"
-				) else (
-					where /Q 7z || call :_package_install 7-zip
-					call :_un7zip %2 "!DEST!"
-				)
+				call :_un7zip %2 "!DEST!"
 			)
 		)
+	)
+
+	if errorlevel 1 (
+		exit /b !ERRORLEVEL!
 	)
 
 	call :_postinstall %1 %2 "!DEST!"
@@ -496,8 +596,6 @@ rem "Application ID" "File path"
 
 rem "Application ID" "File path" "Destination directory"
 :_postinstall
-	call :_is_installed %1 || exit /b 1
-
 	call :_db %1 exclude
 
 	if defined exclude (
@@ -512,8 +610,8 @@ rem "Application ID" "File path" "Destination directory"
 		)
 	)
 
-	call !DB_LOCAL! [%~1] "ts_setup=%~t2"
-	call !DB_LOCAL! [%~1] "size=%~z2"
+	call :_write_local %1 size %~z2
+	call :_write_local %1 filemtime "%~t2"
 
 	call :_app_get_version %1
 	call :_app_make_shims %1
@@ -523,44 +621,61 @@ rem "Application ID" "File path" "Destination directory"
 
 rem "Zip file path" "Destination directory"
 :_unzip
-	call :_un7zip %*
-	if !ERRORLEVEL! LSS 2 exit /b 0
+	where /Q 7z && (
+		call :_un7zip %*
+		exit /b !ERRORLEVEL!
+	)
 
-	where /Q unzip && unzip -u %1 -d %2 & exit /b !ERRORLEVEL!
+	where /Q powershell || (
+		call :_un7zip %*
+		exit /b !ERRORLEVEL!
+	)
 
-	where /Q powershell || exit /b 1
+	set "_zip=%~1"
+	set "_destdir=%~2"
 
 	if not exist %2 mkdir %2
-	!POWERSHELL! -command "& { $shell = new-object -com shell.application; $zip = $shell.NameSpace(\"%~1\"); $shell.Namespace(\"%~2\").copyhere($zip.items()); }"
+
+	call !POWERSHELL! -command "^& { $shell = new-object -com shell.application; $zip = $shell.NameSpace($env^:_zip); $shell.Namespace($env^:_destdir).copyhere($zip.items(), 20); }"
+
 	exit /b !ERRORLEVEL!
 
 
 rem "7zip file path" "Destination directory"
 :_un7zip
-	SET "SEVENZIP=7za"
-	where /Q 7z && SET "SEVENZIP=7z"
-	call !SEVENZIP! x -y -aoa -o"%~2" %1 >nul
+	where /Q 7z || (
+		call :_package_install 7-zip
+	)
+	call 7z x -y -aoa -o"%~2" %1 >nul
 	exit /b !ERRORLEVEL!
 
 
 rem "Application ID"
 :_is_installed
-	cmd /d /c "cd ""!PINT_APPS_DIR!\%~1"" && dir /b /s *.exe" >nul 2>nul
+	dir /b /s "!PINT_APPS_DIR!\%~1\*.exe" >nul 2>nul
 	exit /b !ERRORLEVEL!
 
 
 rem "Application ID"
 :_app_del_shims
-	if not exist "!PINT_APPS_DIR!\%~1" exit /b 0
-	for /f "usebackq delims=" %%i in (`cd "!PINT_APPS_DIR!\%~1" 2^>nul ^&^& dir /b /s /a-d *.exe *.bat *.cmd 2^>nul`) do (
-		if exist "!PINT_APPS_DIR!\%%~ni.bat" del "!PINT_APPS_DIR!\%%~ni.bat"
+	if not exist "!PINT_APPS_DIR!\%~1" (
+		exit /b 0
 	)
+
+	for /f "usebackq delims=" %%i in (`cd "!PINT_APPS_DIR!\%~1" 2^>nul ^&^& dir /b /s /a-d *.exe *.bat *.cmd 2^>nul`) do (
+		if exist "!PINT_APPS_DIR!\%%~ni.bat" (
+			del "!PINT_APPS_DIR!\%%~ni.bat"
+		)
+	)
+
 	exit /b !ERRORLEVEL!
 
 
 rem "Application ID"
 :_app_make_shims
-	if not exist "!PINT_APPS_DIR!\%~1" exit /b 0
+	if not exist "!PINT_APPS_DIR!\%~1" (
+		exit /b 0
+	)
 
 	call :_app_del_shims %1
 
@@ -572,19 +687,27 @@ rem "Application ID"
 
 		if defined noshim (
 			for %%e in (!noshim!) do (
-				if /I "%%~nxi"=="%%~nxe" SET "PASS=0"
+				if /I "%%~nxi"=="%%~nxe" (
+					SET "PASS=0"
+				)
 			)
 		)
 
 		if not !PASS!==0 (
 			call :_exetype "%%i" _subsystem
-			if not !_subsystem!==3 SET "PASS=0"
+			if not !_subsystem!==3 (
+				SET "PASS=0"
+			)
 		)
 
-		if !PASS!==1 call :_shim "!PINT_APPS_DIR!\%~1" "%%i"
+		if !PASS!==1 (
+			call :_shim "!PINT_APPS_DIR!\%~1" "%%i"
+		)
 	)
 
-	if not defined shim exit /b 0
+	if not defined shim (
+		exit /b 0
+	)
 
 	for /f "usebackq delims=" %%i in (`cd "!PINT_APPS_DIR!\%~1" 2^>nul ^&^& dir /b /s /a-d !shim! 2^>nul`) do (
 		call :_shim "!PINT_APPS_DIR!\%~1" "%%i"
@@ -597,7 +720,10 @@ rem "Base path" "Executable file"
 :_shim
 	for /f "usebackq delims=" %%i in (`forfiles /S /P "%~1" /M "%~nx2" /C "cmd /c echo @relpath"`) do (
 		SET RELPATH=%%i
-		if "!RELPATH:~1,1!"=="." SET RELPATH="%%~dp0%~n1\!RELPATH:~3,-1!"
+
+		if "!RELPATH:~1,1!"=="." (
+			SET RELPATH="%%~dp0%~n1\!RELPATH:~3,-1!"
+		)
 
 		>"!PINT_APPS_DIR!\%~n2.bat" (
 			echo @echo off
@@ -652,21 +778,21 @@ rem "Download URL" "Destination directory"
 	:_continue_curl
 
 	if defined DEST_FILE (
-		cmd /c "!CURL! -o "%~2\!DEST_FILE!" "!URL:~1,-1!""
+		cmd /c "!CURL! -o "%~2\!DEST_FILE!" "!URL:~1,-1!"" && (
+			exit /b 0
+		)
 		if not errorlevel 1 exit /b 0
 	) else (
-		if not exist "%~2" mkdir "%~2"
-		pushd "%~2"
-		cmd /c "!CURL! -O -J "!URL:~1,-1!""
-		if not errorlevel 1 (
-			popd
+		if not exist "%~2" (
+			mkdir "%~2"
+		)
+		cmd /c "cd /D ^"%~2^" ^&^& !CURL! -O -J ^"!URL:~1,-1!^"" && (
 			exit /b 0
-		) else (
-			popd
 		)
 	)
 
-	echo FAILED (code !ERRORLEVEL!) && echo.
+	echo FAILED (code !ERRORLEVEL!)
+	echo.
 	exit /b 1
 
 
@@ -677,10 +803,19 @@ rem "Download URL" "Destination directory"
 
 	echo Downloading: !URL:~1,-1!
 
-	if not exist "%~2" mkdir "%~2"
+	if not exist "%~2" (
+		mkdir "%~2"
+	)
 
-	!POWERSHELL! -command "& { (new-object System.Net.WebClient).DownloadFile(\"!URL:~1,-1!\", \"%~2\%~nx1\"); }" && exit /b 0
-	echo FAILED (code !ERRORLEVEL!) && echo.
+	set "_url=!URL:~1,-1!"
+	set "_destfile=%~2\%~nx1"
+
+	call !POWERSHELL! -command "^& { (new-object System.Net.WebClient).DownloadFile($env^:_url, $env^:_destfile); }" && (
+		exit /b 0
+	)
+
+	echo FAILED (code !ERRORLEVEL!)
+	echo.
 	exit /b 1
 
 
@@ -690,18 +825,26 @@ rem "Section" "Key" "Variable name (optional)"
 	exit /b !ERRORLEVEL!
 
 
+rem "Section" "Key" "Value"
+:_write_local
+	call :_write_ini !PINT_HISTORY_FILE! %*
+	exit /b !ERRORLEVEL!
+
+
 rem "Section" "Key" "Variable name (optional)"
 :_db
-	call :_read_ini !PINT_PACKAGES_FILE_USER! %* || call :_read_ini !PINT_PACKAGES_FILE! %*
+	call :_read_ini !PINT_PACKAGES_FILE_USER! %* || (
+		call :_read_ini !PINT_PACKAGES_FILE! %*
+	)
 	exit /b !ERRORLEVEL!
 
 
 rem "Application ID"
 :_app_get_version
 	for /f "usebackq delims=" %%i in (`dir /b /s /a-d /o-s "!PINT_APPS_DIR!\%~1\*.exe" 2^>nul`) do (
-		call :_filever "%%i" filever
-		if defined filever (
-			call !DB_LOCAL! [%~1] "version=!filever!"
+		call :_filever "%%i" _ver
+		if defined _ver (
+			call :_write_local %1 version !_ver!
 			exit /b 0
 		)
 		exit /b 1
@@ -711,17 +854,34 @@ rem "Application ID"
 
 rem "Executable path" "Variable name"
 :_filever
-	@endlocal
-	SET "%~2="
+	if "%~2"=="" (
+		exit /b 1
+	)
 
-	if /I not "%~x1"==".exe" exit /b 1
-	if not exist "%~1" exit /b 1
+	endlocal & (
+		SET "%~2="
+	)
+
+	if /I not "%~x1"==".exe" (
+		exit /b 1
+	)
+
+	if not exist "%~1" (
+		exit /b 1
+	)
 
 	SET "_exefile=%~1"
 	SET "_exefile=!_exefile:\=\\!"
 
-	for /f "usebackq skip=1 delims=" %%i in (`wmic datafile where name^="!_exefile!" get version 2^>nul`) do (
-		SET "%~2=%%i"
+	for /f "usebackq skip=1" %%a in (`wmic datafile where name^="!_exefile!" get version 2^>nul`) do (
+		SET _ver=%%a
+
+		for %%x in (1 2 3 4) do (
+			if "!_ver:~-2!"==".0" set _ver=!_ver:~0,-2!
+		)
+
+		endlocal
+		SET "%~2=!_ver!"
 		exit /b 0
 	)
 
@@ -730,13 +890,20 @@ rem "Executable path" "Variable name"
 
 rem "INI file path" "Section" "Key" "Variable name (optional)"
 :_read_ini
-	@endlocal & (
-		if not "%~3"=="" SET "%~3="
-		if not "%~4"=="" SET "%~4="
+	endlocal & (
+		if not "%~3"=="" (
+			SET "%~3="
+		)
+		if not "%~4"=="" (
+			SET "%~4="
+		)
 	)
-
-	if "%~3"=="" exit /b 1
-	if not exist "%~1" exit /b 1
+	if "%~3"=="" (
+		exit /b 1
+	)
+	if not exist "%~1" (
+		exit /b 1
+	)
 
 	SET SECTION=
 	SET KEY=
@@ -748,7 +915,10 @@ rem "INI file path" "Section" "Key" "Variable name (optional)"
 			)
 		) else (
 			SET "KEY=%%A"
-			if "!KEY:~0,1!"=="[" exit /b 1
+
+			if "!KEY:~0,1!"=="[" (
+				exit /b 1
+			)
 
 			if not "%%B"=="" (
 				if /I "%%A"=="%~3" (
@@ -768,37 +938,176 @@ rem "INI file path" "Section" "Key" "Variable name (optional)"
 	exit /b 1
 
 
+rem "INI file path" "Section" "Key" "Value"
+:_write_ini
+	if "%~1"=="" (
+		exit /b 1
+	)
+
+	set _file="%~1"
+
+	if not "%~4"=="" (
+		rem No file
+		if not exist !_file! (
+			>!_file! (
+				echo [%~2]
+				echo %~3 = %~4
+			)
+			exit /b !ERRORLEVEL!
+		)
+		rem No section
+		find "[%~2]" < !_file! > nul || (
+			(echo [%~2]) >> !_file!
+			(echo %~3 = %~4) >> !_file!
+			find "[%~2]" < !_file! > nul
+			exit /b !ERRORLEVEL!
+		)
+	)
+
+	SET _section=
+	SET _added=
+	SET _pending=
+	SET _header=
+
+	copy /y NUL !PINT_TEMP_FILE! >NUL
+
+	for /f "usebackq tokens=1* delims=^= " %%A in ("%~1") do (
+		SET _header=%%A
+
+		if "!_header:~0,1!"=="[" (
+			SET _pending=%%A
+		) else (
+			SET _header=
+		)
+
+		if not defined _section (
+			if defined _header (
+				if not defined _added (
+					if /I "%%A"=="[%~2]" (
+						SET _section=1
+					)
+				)
+			)
+			if not defined _section (
+				if not "%%B"=="" (
+					if defined _pending (
+						(echo !_pending!) >> !PINT_TEMP_FILE!
+						SET _pending=
+					)
+					(echo %%A = %%B) >> !PINT_TEMP_FILE!
+				)
+			)
+		) else (
+			rem Reached next section, but not found yet
+			if defined _header (
+				if not defined _added (
+					if not "%~4"=="" (
+						(echo %~3 = %~4) >> !PINT_TEMP_FILE!
+						SET _added=1
+						if defined _pending (
+							(echo !_pending!) >> !PINT_TEMP_FILE!
+							SET _pending=
+						)
+					)
+				)
+				SET _section=
+			) else (
+				if not "%~3"=="" (
+					if /I "%%A"=="%~3" (
+						if not "%~4"=="" (
+							if defined _pending (
+								(echo !_pending!) >> !PINT_TEMP_FILE!
+								SET _pending=
+							)
+							(echo %%A = %~4) >> !PINT_TEMP_FILE!
+							SET _added=1
+						)
+					) else (
+						if not "%%B"=="" (
+							if defined _pending (
+								(echo !_pending!) >> !PINT_TEMP_FILE!
+								SET _pending=
+							)
+							(echo %%A = %%B) >> !PINT_TEMP_FILE!
+						)
+					)
+				)
+			)
+		)
+	)
+
+	if defined _section (
+		if not defined _added (
+			if not "%~4"=="" (
+				if defined _pending (
+					(echo !_pending!) >> !PINT_TEMP_FILE!
+					SET _pending=
+				)
+				(echo %~3 = %~4) >> !PINT_TEMP_FILE!
+			)
+		)
+	)
+
+	(type !PINT_TEMP_FILE!) > !_file!
+	del !PINT_TEMP_FILE!
+
+	exit /b 0
+
+
 rem "Executable path" "Subsystem variable" "Arch variable"
 :_exetype
 	endlocal & (
-		if not "%~2"=="" SET "%~2="
-		if not "%~3"=="" SET "%~3="
+		if not "%~2"=="" (
+			SET "%~2="
+		)
+		if not "%~3"=="" (
+			SET "%~3="
+		)
 	)
 
-	if /I "%~x1"==".cmd" exit /b 0
-	if /I "%~x1"==".bat" exit /b 0
-	if /I not "%~x1"==".exe" exit /b 1
+	if /I "%~x1"==".cmd" (
+		exit /b 0
+	)
+	if /I "%~x1"==".bat" (
+		exit /b 0
+	)
+	if /I not "%~x1"==".exe" (
+		exit /b 1
+	)
 
 	set _subsystem=
 	set _arch=
+	set "_file=%~1"
+	set "_command=!POWERSHELL! -command ^"^& { try { $fs = [IO.File]^:^:OpenRead((Convert-Path ^"$env^:_file^")); $br = New-Object IO.BinaryReader($fs); if ($br.ReadUInt16() -ne 23117) { exit 1 } $fs.Position = 0x3C; $fs.Position = $br.ReadUInt32(); $offset = $fs.Position; if ($br.ReadUInt32() -ne 17744) { exit 1 } $fs.Position += 0x14; $bit = 0; switch ($br.ReadUInt16()) { 0x10B { ^"SET _arch^=32^" } 0x20B { ^"SET _arch^=64^" } } $fs.Position = $offset + 4 + 20 + 68; $subsystem = $br.ReadUInt16(); ^"SET _subsystem^=$subsystem^"; exit 0 } catch { $_.Exception; exit 65535 } finally { if ($br  -ne $null) { $br.Close() } if ($fs  -ne $null) { $fs.Close() } } }^""
 
-	for /f "usebackq delims=" %%i in (`!POWERSHELL! -command "^& { try { $fs = [IO.File]::OpenRead((Convert-Path \"%~1\")); $br = New-Object IO.BinaryReader($fs); if ($br.ReadUInt16() -ne 23117) { exit 1 } $fs.Position = 0x3C; $fs.Position = $br.ReadUInt32(); $offset = $fs.Position; if ($br.ReadUInt32() -ne 17744) { exit 1 } $fs.Position += 0x14; $bit = 0; switch ($br.ReadUInt16()) { 0x10B { \"SET _arch^=32\" } 0x20B { \"SET _arch^=64\" } } $fs.Position = $offset + 4 + 20 + 68; $subsystem = $br.ReadUInt16(); \"SET _subsystem^=$subsystem\"; exit 0 } catch { $_.Exception; exit 65535 } finally { if ($br  -ne $null) { $br.Close() } if ($fs  -ne $null) { $fs.Close() } } }"`) do %%i
+	for /f "usebackq delims=" %%i in (`!_command!`) do %%i
 
 	endlocal & (
-		if not "%~2"=="" SET "%~2=!_subsystem!"
-		if not "%~3"=="" SET "%~3=!_arch!"
+		if not "%~2"=="" (
+			SET "%~2=!_subsystem!"
+		)
+		if not "%~3"=="" (
+			SET "%~3=!_arch!"
+		)
 	)
 
-	if !ERRORLEVEL!==3 exit /b 0
+	if !ERRORLEVEL!==3 (
+		exit /b 0
+	)
+
 	exit /b 1
 
 
 rem Installs missing executables
 rem "Application ID" "Download URL"
 :_has
-	where /Q %1 && exit /b 0
+	where /Q %1 && (
+		exit /b 0
+	)
 
-	if exist "!PINT_DIST_DIR!\%~1" rmdir /S /Q "!PINT_DIST_DIR!\%~1"
+	if exist "!PINT_DIST_DIR!\%~1" (
+		rmdir /S /Q "!PINT_DIST_DIR!\%~1"
+	)
 
 	call :_download_ps "%~2" "!PINT_DIST_DIR!\%~1"
 
@@ -810,5 +1119,3 @@ rem "Application ID" "Download URL"
 	:continue_has
 	where /Q %1
 	exit /b !ERRORLEVEL!
-
-goto :eof
