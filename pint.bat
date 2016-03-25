@@ -478,8 +478,13 @@ rem "Application ID" "DIST Variable name"
 		)
 		SET link=!link:^"=\"!
 		SET referer=--referer "!dist!"
+		SET _parsed=
 		for /f "usebackq tokens=* delims=" %%i in (`xidel "!dist!" -e "(!link:%%=%%%%!)[1]" --quiet --header="Referer^: !dist!" --user-agent="!PINT_USER_AGENT!"`) do (
 			set "dist=%%i"
+			SET _parsed=1
+		)
+		if not defined _parsed (
+			exit /b 1
 		)
 	)
 
@@ -781,12 +786,11 @@ rem "Download URL" "Destination directory"
 		cmd /c "!CURL! -o "%~2\!DEST_FILE!" "!URL:~1,-1!"" && (
 			exit /b 0
 		)
-		if not errorlevel 1 exit /b 0
 	) else (
 		if not exist "%~2" (
 			mkdir "%~2"
 		)
-		cmd /c "cd /D ^"%~2^" ^&^& !CURL! -O -J ^"!URL:~1,-1!^"" && (
+		cmd /c "cd /D "%~2" ^&^& !CURL! -O -J "!URL:~1,-1!"" && (
 			exit /b 0
 		)
 	)
