@@ -22,22 +22,23 @@ SET PINT="%~f0"
 path !PINT_APPS_DIR!;%PATH%
 
 rem Hardcoded URLs
-set "PINT_DEFAULT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini"
+set "PINT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini"
 set "PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.bat"
-set "PINT_CURL_URL=https://bintray.com/artifact/download/vszakats/generic/curl-7.48.0-win32-mingw.7z"
-set "PINT_XIDEL_URL=http://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel%%200.9/xidel-0.9.win32.zip"
 
 SET CMD="%WINDIR%\system32\cmd.exe"
 SET FINDSTR="%WINDIR%\system32\findstr.exe"
 SET FIND="%WINDIR%\system32\find.exe"
 SET SORT="%WINDIR%\system32\sort.exe"
 SET FORFILES="%WINDIR%\system32\forfiles.exe"
+SET MSIEXEC="%WINDIR%\system32\msiexec.exe"
 
 rem Functions accessible directly from the command line
 SET PUBLIC_FUNCTIONS=usage self-update update subscribe subscribed install reinstall
 SET PUBLIC_FUNCTIONS=!PUBLIC_FUNCTIONS! download remove purge upgrade search outdated add pin unpin
 
-SET CURL=curl --insecure --ssl-no-revoke --ssl-allow-beast --progress-bar --remote-header-name --location --max-redirs 5 --retry 2 --retry-delay 1 -X GET
+SET CURL=curl --insecure --ssl-no-revoke --ssl-allow-beast --progress-bar --remote-header-name --location
+SET CURL=!CURL! --max-redirs 5 --retry 2 --retry-delay 1 -X GET
+
 SET POWERSHELL=powershell -NonInteractive -NoLogo -NoProfile -executionpolicy bypass
 
 rem Create directories if needed
@@ -50,15 +51,15 @@ if not exist !PINT_HISTORY_FILE! (
 )
 
 call :_has xidel || (
-	echo Unable to find Xidel
+	echo Unable to install Xidel.
 	exit /b 1
 )
 call :_has 7z 7-zip || (
-	echo Unable to find 7-zip
+	echo Unable to install 7-zip.
 	exit /b 1
 )
 call :_has curl || (
-	echo Unable to find curl
+	echo Unable to install curl.
 	exit /b 1
 )
 
@@ -129,7 +130,7 @@ rem *****************************************
 	SET /a SRC_COUNT=0
 
 	if not exist !PINT_SRC_FILE! (
-		(echo !PINT_DEFAULT_PACKAGES!) > !PINT_SRC_FILE!
+		(echo !PINT_PACKAGES!) > !PINT_SRC_FILE!
 	)
 
 	copy /y NUL !PINT_PACKAGES_FILE! >nul
@@ -524,10 +525,14 @@ rem "Application ID" "DIST Variable name"
 
 	if "%PROCESSOR_ARCHITECTURE%"=="x86" (
 		call :_db %1 dist
+		call :_db %1 follow
 		call :_db %1 link
 	) else (
 		call :_db %1 dist64 dist || (
 			call :_db %1 dist
+		)
+		call :_db %1 follow64 follow || (
+			call :_db %1 follow
 		)
 		call :_db %1 link64 link || (
 			call :_db %1 link
@@ -547,6 +552,12 @@ rem "Application ID" "DIST Variable name"
 	)
 
 	if defined link (
+
+		if defined follow (
+			SET follow=!follow:^"=\"!
+			SET follow=--follow "!follow: | =" --follow "!"
+		)
+
 		if not "!link!"=="!link:/a=!" (
 			SET "link=!link!/resolve-uri(normalize-space(@href), base-uri())"
 		)
@@ -554,7 +565,7 @@ rem "Application ID" "DIST Variable name"
 		SET referer=--referer "!dist!"
 		SET _parsed=
 
-		for /f "usebackq tokens=* delims=" %%i in (`xidel "!dist!" -e "(!link:%%=%%%%!)[1]" --quiet --header="Referer^: !dist!" --user-agent="!PINT_USER_AGENT!"`) do (
+		for /f "usebackq tokens=* delims=" %%i in (`xidel "!dist!" !follow! --quiet --extract "(!link:%%=%%%%!)[1]" --header="Referer^: !dist!" --user-agent="!PINT_USER_AGENT!"`) do (
 			set "dist=%%i"
 			SET _parsed=1
 		)
@@ -652,7 +663,7 @@ rem "Application ID" "@var File path"
 	echo Installing %~1 to !_appdir!
 
 	if /I "!%~2:~-4!"==".msi" (
-		!CMD! /d /c msiexec /a "!%~2!" /norestart /qn TARGETDIR="!_appdir!" >nul
+		!CMD! /d /c !MSIEXEC! /a "!%~2!" /norestart /qn TARGETDIR="!_appdir!" >nul
 	) else (
 		if /I "!%~2:~-4!"==".zip" (
 			call :_unzip %2 _appdir
@@ -804,7 +815,7 @@ rem "Application ID"
 	exit /b 0
 
 
-rem "VALUE: Base path" "VALUE: Executable file"
+rem "Base path" "Executable file"
 :_shim
 	for /f "usebackq tokens=* delims=" %%i in (`forfiles /S /P "%~1" /M "%~nx2" /C "!CMD! /d /c echo @relpath"`) do (
 		SET RELPATH=%%i
@@ -1121,7 +1132,7 @@ rem "INI file path" "Section" "Key" "Env variable with value"
 	exit /b 0
 
 
-rem "Variable with Executable path" "Subsystem variable" "Arch variable"
+rem "Executable path" "@var Subsystem" "@var Arch"
 :_exetype
 	endlocal
 	SET "%~2="
@@ -1137,7 +1148,7 @@ rem "Variable with Executable path" "Subsystem variable" "Arch variable"
 
 
 rem Installs missing executables
-rem "EXE file" "Application ID"
+rem "Executable path" "Application ID"
 :_has
 	call :_where %1 && (
 		exit /b 0
