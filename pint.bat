@@ -27,12 +27,15 @@ set "PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.bat
 set "PINT_CURL_URL=https://bintray.com/artifact/download/vszakats/generic/curl-7.48.0-win32-mingw.7z"
 set "PINT_XIDEL_URL=http://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel%%200.9/xidel-0.9.win32.zip"
 
-rem Functions accessible directly from the command line
-SET PUBLIC_FUNCTIONS=usage self-update update subscribe subscribed install reinstall installed download remove purge upgrade search outdated add pin unpin
-
-SET WHERE="%WINDIR%\system32\where.exe"
+SET CMD="%WINDIR%\system32\cmd.exe"
 SET FINDSTR="%WINDIR%\system32\findstr.exe"
 SET FIND="%WINDIR%\system32\find.exe"
+SET SORT="%WINDIR%\system32\sort.exe"
+SET FORFILES="%WINDIR%\system32\forfiles.exe"
+
+rem Functions accessible directly from the command line
+SET PUBLIC_FUNCTIONS=usage self-update update subscribe subscribed install reinstall
+SET PUBLIC_FUNCTIONS=!PUBLIC_FUNCTIONS! download remove purge upgrade search outdated add pin unpin
 
 SET CURL=curl --insecure --ssl-no-revoke --ssl-allow-beast --progress-bar --remote-header-name --location --max-redirs 5 --retry 2 --retry-delay 1 -X GET
 SET POWERSHELL=powershell -NonInteractive -NoLogo -NoProfile -executionpolicy bypass
@@ -46,13 +49,16 @@ if not exist !PINT_HISTORY_FILE! (
 	copy /y NUL !PINT_HISTORY_FILE! >NUL
 )
 
-rem Validate the environment and install missing tools
-call :_has curl PINT_CURL_URL || (
-	echo Unable to find curl
+call :_has xidel || (
+	echo Unable to find Xidel
 	exit /b 1
 )
-call :_has xidel PINT_XIDEL_URL || (
-	echo Unable to find Xidel
+call :_has 7z 7-zip || (
+	echo Unable to find 7-zip
+	exit /b 1
+)
+call :_has curl || (
+	echo Unable to find curl
 	exit /b 1
 )
 
@@ -85,7 +91,7 @@ rem *****************************************
 :usage
 	echo PINT - Portable INsTaller
 	echo.
-	echo Usage^:
+	echo Usage:
 	echo pint update^|self-update^|usage^|subscribed^|installed^|search^|outdated^|upgrade
 	echo pint download^|install^|reinstall^|installed^|purge^|pin^|unpin ^<package(s)^>
 	echo pint search^|outdated^|upgrade^|remove^|purge^|pin^|unpin ^<package(s)^>
@@ -102,7 +108,7 @@ rem *****************************************
 		del !PINT_TEMP_FILE!
 	)
 
-	cmd /d /c !CURL! -s -S -o !PINT_TEMP_FILE! "!PINT_SELF_URL!" >nul
+	!CMD! /d /c !CURL! -s -S -o !PINT_TEMP_FILE! "!PINT_SELF_URL!" >nul
 	if errorlevel 1 (
 		echo Self-update failed^^!
 		exit /b 1
@@ -131,7 +137,7 @@ rem *****************************************
 	for /f "usebackq tokens=* delims=" %%f in ("!PINT_SRC_FILE:~1,-1!") do (
 		set /p ="Fetching %%f "<nul
 
-		cmd /d /c !CURL! --compressed -s -S -o !PINT_TEMP_FILE! "%%f" >nul
+		!CMD! /d /c !CURL! --compressed -s -S -o !PINT_TEMP_FILE! "%%f" >nul
 
 		if errorlevel 1 (
 			echo - failed^^!
@@ -162,9 +168,9 @@ rem "Term"
 		call :update
 	)
 	if exist !PINT_PACKAGES_FILE_USER! (
-		!FINDSTR! /I /R "^^\[.*%~1" !PINT_PACKAGES_FILE_USER! | sort
+		!FINDSTR! /I /R "^^\[.*%~1" !PINT_PACKAGES_FILE_USER! | !SORT!
 	)
-	!FINDSTR! /I /R "^^\[.*%~1" !PINT_PACKAGES_FILE! | sort
+	!FINDSTR! /I /R "^^\[.*%~1" !PINT_PACKAGES_FILE! | !SORT!
 
 	if "%~1"=="" (
 		exit /b 0
@@ -500,9 +506,8 @@ rem "Application ID"
 
 rem "Application ID"
 :_is_upgradable
-	call :_read_log %1 pinned
-	if defined pinned (
-		echo Updates for %~1 are suppressed. To allow this install, use^: pint unpin %~1
+	call :_read_log %1 pinned && (
+		echo Updates for are suppressed. To allow this install, use pint unpin %~1
 		exit /b 1
 	)
 	exit /b 0
@@ -601,7 +606,7 @@ rem "Variable with URL" "File size" "Application ID"
 :_diff_size
 	SET "EXISTS="
 
-	cmd /d /c !CURL! -s -S -I "!%~1!" -o !PINT_TEMP_FILE! >nul
+	!CMD! /d /c !CURL! -s -S -I "!%~1!" -o !PINT_TEMP_FILE! >nul
 
 	!FINDSTR! /L /C:" 200 OK" !PINT_TEMP_FILE! >nul && (
 		SET EXISTS=1
@@ -647,7 +652,7 @@ rem "Application ID" "@var File path"
 	echo Installing %~1 to !_appdir!
 
 	if /I "!%~2:~-4!"==".msi" (
-		cmd /d /c msiexec /a "!%~2!" /norestart /qn TARGETDIR="!_appdir!" >nul
+		!CMD! /d /c msiexec /a "!%~2!" /norestart /qn TARGETDIR="!_appdir!" >nul
 	) else (
 		if /I "!%~2:~-4!"==".zip" (
 			call :_unzip %2 _appdir
@@ -707,12 +712,12 @@ rem "File path" "@var Size" "@var File time"
 
 rem "@var Zip file path" "@var Destination directory"
 :_unzip
-	!WHERE! /Q 7z && (
+	call :_where 7z && (
 		call :_un7zip %*
 		exit /b !ERRORLEVEL!
 	)
 
-	!WHERE! /Q powershell || (
+	where /Q powershell || (
 		call :_un7zip %*
 		exit /b !ERRORLEVEL!
 	)
@@ -721,17 +726,14 @@ rem "@var Zip file path" "@var Destination directory"
 		md "!%~2!"
 	)
 
-	cmd /d /c !POWERSHELL! -command "^& { $shell = new-object -com shell.application; $zip = $shell.NameSpace($env^:%~1); $shell.Namespace($env^:%~2).copyhere($zip.items(), 20); }" >nul
+	!CMD! /d /c !POWERSHELL! -command "^& { $shell = new-object -com shell.application; $zip = $shell.NameSpace($env^:%~1); $shell.Namespace($env^:%~2).copyhere($zip.items(), 20); }" >nul
 
 	exit /b !ERRORLEVEL!
 
 
 rem "@var 7zip file path" "@var Destination directory"
 :_un7zip
-	!WHERE! /Q 7z || (
-		call :_package_install 7-zip
-	)
-	cmd /d /c 7z x -y -aoa -o"!%~2!" "!%~1!" >nul
+	!CMD! /d /c 7z x -y -aoa -o"!%~2!" "!%~1!" >nul
 	exit /b !ERRORLEVEL!
 
 
@@ -804,7 +806,7 @@ rem "Application ID"
 
 rem "VALUE: Base path" "VALUE: Executable file"
 :_shim
-	for /f "usebackq tokens=* delims=" %%i in (`forfiles /S /P "%~1" /M "%~nx2" /C "cmd /d /c echo @relpath"`) do (
+	for /f "usebackq tokens=* delims=" %%i in (`forfiles /S /P "%~1" /M "%~nx2" /C "!CMD! /d /c echo @relpath"`) do (
 		SET RELPATH=%%i
 
 		if "!RELPATH:~1,1!"=="." (
@@ -823,7 +825,7 @@ rem "VALUE: Base path" "VALUE: Executable file"
 	exit /b !ERRORLEVEL!
 
 
-rem "Variable with Download URL" "Variable with Destination directory"
+rem "@var Download URL" "@var Destination directory"
 :_curl
 	SET "DEST_FILE="
 	
@@ -861,15 +863,20 @@ rem "Variable with Download URL" "Variable with Destination directory"
 
 	:_continue_curl
 
+	call :_where curl || (
+		call :_download_ps %1 "!%~1!" %2
+		exit /b !ERRORLEVEL!
+	)
+
 	if defined DEST_FILE (
-		cmd /d /c !CURL! -o "!%~2!\!DEST_FILE!" "!%~1!" >nul
+		!CMD! /d /c !CURL! -o "!%~2!\!DEST_FILE!" "!%~1!" >nul
 		if not errorlevel 1 exit /b 0
 	) else (
 		if not exist "!%~2!" (
 			md "!%~2!"
 		)
 		pushd "!%~2!"
-		cmd /d /c !CURL! -O -J "!%~1!" >nul
+		!CMD! /d /c !CURL! -O -J "!%~1!" >nul
 		if not errorlevel 1 (
 			popd
 			exit /b 0
@@ -884,15 +891,13 @@ rem "Variable with Download URL" "Variable with Destination directory"
 
 rem "@var Download URL" "Download URL" "@var Destination directory"
 :_download_ps
-	echo Downloading: !%~1!
-
 	if not exist "!%~3!" (
 		md "!%~3!"
 	)
 
 	set "_destfile=!%~3!\%~nx2"
 
-	cmd /d /c !POWERSHELL! -command "^& { (new-object System.Net.WebClient).DownloadFile($env^:%~1, $env^:_destfile); }" >nul
+	!CMD! /d /c !POWERSHELL! -command "^& { (new-object System.Net.WebClient).DownloadFile($env^:%~1, $env^:_destfile); }" >nul
 
 	if not errorlevel 1 (
 		exit /b 0
@@ -1002,9 +1007,9 @@ rem "INI file path" "Section" "Key" "Env variable with value"
 	if not "%~4"=="" (
 		rem No file
 		if not exist !_file! (
-			>!_file! (
-				echo [%~2]
-				echo %~3 = !%~4!
+			(echo [%~2]) > !_file!
+			for /f "usebackq tokens=1 delims=" %%Z in (`echo %~3 ^= ^!%~4^!`) do (
+				(echo %%Z) >> !_file!
 			)
 			exit /b !ERRORLEVEL!
 		)
@@ -1122,36 +1127,36 @@ rem "Variable with Executable path" "Subsystem variable" "Arch variable"
 	SET "%~2="
 	SET "%~3="
 
-	if /I "!%~1:~-4!"==".cmd" (
-		exit /b 0
-	)
-	if /I "!%~1:~-4!"==".bat" (
-		exit /b 0
-	)
 	if /I not "!%~1:~-4!"==".exe" (
 		exit /b 1
 	)
 
-	for /f "usebackq tokens=* delims=" %%i in (`!POWERSHELL! -command "^& { try { $fs = [IO.File]::OpenRead((Convert-Path \"$env^:%~1\")); $br = New-Object IO.BinaryReader($fs); if ($br.ReadUInt16() -ne 23117) { exit 1 } $fs.Position = 0x3C; $fs.Position = $br.ReadUInt32(); $offset = $fs.Position; if ($br.ReadUInt32() -ne 17744) { exit 1 } $fs.Position += 0x14; switch ($br.ReadUInt16()) { 0x10B { \"SET _arch^=32\" } 0x20B { \"SET _arch^=64\" } } $fs.Position = $offset + 4 + 20 + 68; $subsystem = $br.ReadUInt16(); \"SET _subsystem^=$subsystem\"; exit 0 } catch { $_.Exception; exit 65535 } finally { if ($br  -ne $null) { $br.Close() } if ($fs  -ne $null) { $fs.Close() } } }"`) do %%i
+	for /f "usebackq tokens=* delims=" %%i in (`!POWERSHELL! -command "^& { try { $fs = [IO.File]::OpenRead((Convert-Path \"$env^:%~1\")); $br = New-Object IO.BinaryReader($fs); if ($br.ReadUInt16() -ne 23117) { exit 1 } $fs.Position = 0x3C; $fs.Position = $br.ReadUInt32(); $offset = $fs.Position; if ($br.ReadUInt32() -ne 17744) { exit 1 } $fs.Position += 0x14; switch ($br.ReadUInt16()) { 0x10B { \"SET %~3^=32\" } 0x20B { \"SET _arch^=64\" } } $fs.Position = $offset + 4 + 20 + 68; $subsystem = $br.ReadUInt16(); \"SET %~2^=$subsystem\"; exit 0 } catch { $_.Exception; exit 65535 } finally { if ($br  -ne $null) { $br.Close() } if ($fs  -ne $null) { $fs.Close() } } }"`) do %%i
 
 	exit /b 0
 
 
 rem Installs missing executables
-rem "Application ID" "Variable with Download URL"
+rem "EXE file" "Application ID"
 :_has
-	!WHERE! /Q %1 && (
+	call :_where %1 && (
 		exit /b 0
 	)
 
-	set "_distdir=!PINT_DIST_DIR!\%~1"
+	echo Pint depends on %1, trying to install it automatically. Please wait...
 
-	if exist "!_distdir!" (
-		rd /S /Q "!_distdir!"
+	if not "%~2"=="" (
+		call :_package_force_install %2
+	) else (
+		call :_package_force_install %1
 	)
 
-	call :_download_ps %2 "!%~2!" _distdir
-	call :_install_app %1 _distdir
-
-	!WHERE! /Q %1
+	call :_where %1
 	exit /b !ERRORLEVEL!
+
+
+:_where
+	if exist "!PINT_APPS_DIR!\%~1.bat" (
+		exit /b 0
+	)
+	exit /b 1
