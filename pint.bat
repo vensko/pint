@@ -30,17 +30,19 @@ SET FIND="%WINDIR%\system32\find.exe"
 SET SORT="%WINDIR%\system32\sort.exe"
 SET FORFILES="%WINDIR%\system32\forfiles.exe"
 SET MSIEXEC="%WINDIR%\system32\msiexec.exe"
+SET ROBOCOPY="%WINDIR%\system32\robocopy.exe"
 
 rem Functions accessible directly from the command line
 SET BAT_FUNCTIONS=usage self-update update subscribe subscribed install reinstall
 SET BAT_FUNCTIONS=!BAT_FUNCTIONS! download remove purge upgrade search outdated add pin unpin
-SET JS_FUNCTIONS=unzip
+SET JS_FUNCTIONS=unzip autodl
 SET PS_FUNCTIONS=shim download-file
 
 SET CURL=curl --insecure --ssl-no-revoke --ssl-allow-beast --progress-bar --remote-header-name --location
 SET CURL=!CURL! --create-dirs --fail --max-redirs 5 --retry 2 --retry-delay 1 -X GET
 
 SET POWERSHELL=powershell -NonInteractive -NoLogo -NoProfile -executionpolicy bypass
+SET JSCRIPT="%WINDIR%\system32\cscript.exe" //nologo //e:jscript !PINT!
 
 if "%~1"=="" (
 	call :usage
@@ -56,6 +58,33 @@ if not exist !PINT_HISTORY_FILE! (
 	>nul copy /y NUL !PINT_HISTORY_FILE!
 )
 
+if not %1==update (
+	if not exist !PINT_PACKAGES_FILE! (
+		call :update
+	)
+)
+
+rem JScript
+for %%x in (!JS_FUNCTIONS!) do (
+	if "%~1"=="%%x" (
+		!JSCRIPT! %*
+		exit /b !ERRORLEVEL!
+	)
+)
+
+rem PowerShell
+for %%x in (!PS_FUNCTIONS!) do (
+	if "%~1"=="%%x" (
+		SET "_COMMAND=%~1"
+		if not "%~2"=="" SET "_PARAM_1=%~2"
+		if not "%~3"=="" SET "_PARAM_2=%~3"
+		if not "%~4"=="" SET "_PARAM_3=%~4"
+		if not "%~5"=="" SET "_PARAM_4=%~5"
+		!POWERSHELL! "iex ( ${!PINT:~1,-1!} | select -skip 1 | out-string)"
+		exit /b !ERRORLEVEL!
+	)
+)
+
 call :_has xidel || (
 	echo Unable to install Xidel.
 	exit /b 1
@@ -69,34 +98,12 @@ call :_has curl || (
 	exit /b 1
 )
 
-if not %1==update (
-	if not exist !PINT_PACKAGES_FILE! (
-		call :update
-	)
-)
-
 rem Ready, steady, go
 for %%x in (!BAT_FUNCTIONS!) do (
 	if "%~1"=="%%x" (
 		call :%*
 		if exist !PINT_TEMP_FILE! del !PINT_TEMP_FILE!
 		exit /b
-	)
-)
-
-rem JScript
-for %%x in (!JS_FUNCTIONS!) do (
-	if "%~1"=="%%x" (
-		call :_js %*
-		exit /b !ERRORLEVEL!
-	)
-)
-
-rem PowerShell
-for %%x in (!PS_FUNCTIONS!) do (
-	if "%~1"=="%%x" (
-		call :_ps %*
-		exit /b !ERRORLEVEL!
 	)
 )
 
@@ -108,7 +115,6 @@ rem *****************************************
 rem  FUNCTIONS
 rem *****************************************
 
-rem robocopy D:\1 D:\2 /E /MOVE /PURGE /NJS /NJH /NC /NDL /ETA /XF *.zip
 
 :usage
 	echo PINT - Portable INsTaller
@@ -121,21 +127,6 @@ rem robocopy D:\1 D:\2 /E /MOVE /PURGE /NJS /NJH /NC /NDL /ETA /XF *.zip
 	echo pint subscribe ^<packages-ini-url^>
 
 	exit /b 0
-
-
-:_ps
-	SET "_COMMAND=%~1"
-	if not "%~2"=="" SET "_PARAM_1=%~2"
-	if not "%~3"=="" SET "_PARAM_2=%~3"
-	if not "%~4"=="" SET "_PARAM_3=%~4"
-	if not "%~5"=="" SET "_PARAM_4=%~5"
-	!POWERSHELL! "iex ( ${!PINT:~1,-1!} | select -skip 1 | out-string)"
-	exit /b !ERRORLEVEL!
-
-
-:_js
-	"%WINDIR%\system32\cscript.exe" //nologo //e:jscript !PINT! %*
-	exit /b !ERRORLEVEL!
 
 
 :self-update
@@ -323,12 +314,12 @@ rem "Application ID" "File URL"
 
 	set "_destdir=!PINT_DIST_DIR!\%~1"
 
-	call :_curl _url _destdir || (
+	call :_download _url _destdir || (
 		echo Unable to download %~1 from %~2.
 		exit /b 1
 	)
 
-	call :_install_app %1 _destdir && (
+	call :_install_app %1 "!_destdir!" && (
 		call :_write_ini !PINT_PACKAGES_FILE_USER! %1 dist %2
 	)
 
@@ -457,7 +448,7 @@ rem "Application ID"
 
 	set "_destdir=!PINT_DIST_DIR!\%~1"
 
-	call :_curl _dist _destdir || (
+	call :_download _dist _destdir || (
 		echo Unable to download an update for %1.
 		exit /b 1
 	)
@@ -484,12 +475,12 @@ rem "Application ID"
 
 	set "_destdir=!PINT_DIST_DIR!\%~1"
 
-	call :_curl _url _destdir || (
+	call :_download _url _destdir || (
 		echo Unable to download %1.
 		exit /b 1
 	)
 
-	call :_install_app %1 _destdir
+	call :_install_app %1 "!_destdir!"
 	exit /b !ERRORLEVEL!
 
 
@@ -532,12 +523,12 @@ rem "Application ID"
 
 	set "_destdir=!PINT_DIST_DIR!\%~1"
 
-	call :_curl _url _destdir || (
+	call :_download _url _destdir || (
 		echo Unable to download an update for %1.
 		exit /b 1
 	)
 
-	call :_install_app %1 _destdir
+	call :_install_app %1 "!_destdir!"
 	exit /b !ERRORLEVEL!
 
 
@@ -591,6 +582,8 @@ rem "Application ID" "DIST Variable name"
 		SET link=!link:^"=\"!
 		SET referer=--referer "!dist!"
 		SET _parsed=
+
+		echo Extracting a download link from !dist!
 
 		for /f "usebackq tokens=* delims=" %%i in (`xidel "!dist!" !follow! --quiet --extract "(!link:%%=%%%%!)[1]" --header="Referer^: !dist!" --user-agent="!PINT_USER_AGENT!"`) do (
 			set "dist=%%i"
@@ -670,77 +663,99 @@ rem "Application ID" "Variable with file URL"
 	)
 
 
-rem "Application ID" "@var Source directory"
+rem "Application ID" "Source directory"
 :_install_app
-	set "_archive="
-	for /f "usebackq tokens=* delims=" %%i in (`2^>nul dir /b /s /a-d "!%~2!"`) do (
-		set "_archive=%%i"
-	)
-	if defined _archive (
-		call :install_file %1 _archive
-	)
-	exit /b !ERRORLEVEL!
-
-
-rem "Application ID" "@var File path"
-:install_file
-	set "_appdir=!PINT_APPS_DIR!\%~1"
-
-	if not exist "!_appdir!" (
-		md "!_appdir!"
-	)
-
-	echo Installing %~1 to !_appdir!
-
-	if /I "!%~2:~-4!"==".msi" (
-		>nul !MSIEXEC! /a "!%~2!" /norestart /qn TARGETDIR="!_appdir!"
-	) else (
-		if /I "!%~2:~-4!"==".zip" (
-			call :_unzip %2 _appdir
-		) else (
-			call :_db %1 type
-			if /I !type!==standalone (
-				>nul copy /Y "!%~2!" /B "!_appdir!"
-			) else (
-				call :_un7zip %2 _appdir
-			)
-		)
-	)
-
-	if errorlevel 1 (
+	for /f "usebackq tokens=* delims=" %%i in (`2^>nul dir /b /s /a-d %2`) do (
+		call :install_file %1 "%%i" "!PINT_APPS_DIR!\%~1"
 		exit /b !ERRORLEVEL!
 	)
+	exit /b 1
 
-	call :_postinstall %1 %2 _appdir
+
+rem "File path" "Destination directory"
+:_unpack
+	echo Unpacking %~nx1
+
+	if not exist %2 md %2
+
+	if /I "%~x1"==".msi" (
+		>nul !MSIEXEC! /a %1 /norestart /qn TARGETDIR=%2
+	) else (
+		if /I "%~x1"==".zip" (
+			call :_unzip %1 %2
+		) else (
+			call :_un7zip %1 %2
+		)
+	)
 
 	exit /b !ERRORLEVEL!
 
 
-rem "Application ID" "@var File path" "@var Destination directory"
-:_postinstall
-	call :_db %1 exclude || (
-		set "exclude=^$PLUGINSDIR ^$TEMP"
-	)
-
-	for %%x in (!exclude!) do (
-		if exist "!%~3!\%%x" (
-			if exist "!%~3!\%%x\*" (
-				rd /S /Q "!%~3!\%%x"
-			) else (
-				del /S /Q "!%~3!\%%x"
-			)
+rem "Directory" "Search string" "@var Result path"
+:_get_root
+	cd /D %1
+	for /f "usebackq tokens=* delims=" %%i in (`dir /b /s`) do (
+		set "_file=%%i"
+		if not "!_file!"=="!_file:%~2=!" (
+			endlocal & set "%~3=%%i"
+			exit /b 0
 		)
 	)
+	exit /b 1
 
-	call :_get_file_properties "!%~2!" _size _filemtime
 
+rem "Application ID" "File path" "Destination directory"
+:install_file
+	echo Installing %~1 to %~3
+
+	set "type="
+	if /I "%~x2"==".exe" call :_db %1 type
+
+	if /I "!type!"=="standalone" (
+		if not exist %3 md %3
+		>nul copy /Y %2 /B "%~3\%~nx2"
+	) else (
+		set "_tempdir=%TEMP%\pint\%~1%RANDOM%"
+		if not exist "!_tempdir!" md "!_tempdir!"
+		cd /D "!_tempdir!" || exit /b !ERRORLEVEL!
+
+		call :_unpack %2 "!_tempdir!" || exit /b !ERRORLEVEL!
+
+		if "%PROCESSOR_ARCHITECTURE%"=="x86" (
+			call :_db %1 base
+			call :_db %1 xf
+			call :_db %1 xd
+		) else (
+			call :_db %1 base64 base || call :_db %1 base
+			call :_db %1 xf64 xf || call :_db %1 xf
+			call :_db %1 xd64 xd || call :_db %1 xd
+		)
+
+		if defined base (
+			call :_get_root "!_tempdir!" "!base!" _base_dir && (
+				cd /D "!_base_dir!\.." || exit /b !ERRORLEVEL!
+			)
+		)
+
+		if defined xf set "xf=/XF !xf!"
+		if defined xd set "xd=/XD !xd!"
+		>nul !ROBOCOPY! "!cd!" %3 /E /PURGE /NJS /NJH /NFL /NDL /ETA !xf! !xd!
+		cd /D %3
+		rd /Q /S "%TEMP%\pint"
+	)
+
+	call :_get_file_properties %2 _size _filemtime
 	call :_write_log %1 size !_size!
 	call :_write_log %1 filemtime "!_filemtime!"
 
-	call :_app_get_version %1
+	call :_app_get_version %3 _v && (
+		echo Detected version !_v!
+		call :_write_log %1 version "!_v!"
+	)
+
 	call :_shims %1
 
-	exit /b 0
+	exit /b !ERRORLEVEL!
 
 
 rem "File path" "@var Size" "@var File time"
@@ -751,19 +766,19 @@ rem "File path" "@var Size" "@var File time"
 	exit /b !ERRORLEVEL!
 
 
-rem "@var Zip file path" "@var Destination directory"
+rem "Zip file path" "Destination directory"
 :_unzip
 	call :_where 7z && (
 		call :_un7zip %*
 		exit /b !ERRORLEVEL!
 	)
-	>nul call :_js unzip %*
+	>nul !JSCRIPT! unzip %*
 	exit /b !ERRORLEVEL!
 
 
 rem "@var 7zip file path" "@var Destination directory"
 :_un7zip
-	>nul call 7z x -y -bso1 -bsp0 -aoa -o"!%~2!" "!%~1!"
+	>nul 1>nul call 7z x -y -bso1 -bsp0 -aoa -o%2 %1
 	exit /b !ERRORLEVEL!
 
 
@@ -777,12 +792,12 @@ rem "Application ID" "delete"
 :_shims
 	call :_db %1 shim
 	call :_db %1 noshim
-	call :_ps shim "!PINT_APPS_DIR!\%~1" "!shim!" "!noshim!" %2
+	call !PINT! shim "!PINT_APPS_DIR!\%~1" "!shim!" "!noshim!" %2
 	exit /b 0
 
 
 rem "@var Download URL" "@var Destination directory" "Download URL"
-:_curl
+:_download
 	SET "DEST_FILE="
 	
 	echo Downloading !%~1!
@@ -811,17 +826,17 @@ rem "@var Download URL" "@var Destination directory" "Download URL"
 		)
 	)
 
-	if not "%~x1"=="" (
-		if not defined DEST_FILE (
-			SET DEST_FILE=%~nx1
-		)
-	)
-
 	:_continue_curl
 
 	call :_where curl || (
-		call :_ps download-file "!%~1!" "!%~2!\!DEST_FILE!" && exit /b 0
-		echo FAILED
+		if not defined DEST_FILE (
+			call :_filename "!%~1!" DEST_FILE
+			set "DEST_FILE=!DEST_FILE:?=!"
+			set "DEST_FILE=!DEST_FILE:;=!"
+		)
+		if not defined DEST_FILE set "DEST_FILE=download"
+		call !PINT! download-file "!%~1!" "!%~2!\!DEST_FILE!" && exit /b 0
+		echo Download FAILED. Install curl, in many cases this may help.
 		exit /b 1
 	)
 
@@ -840,6 +855,12 @@ rem "@var Download URL" "@var Destination directory" "Download URL"
 		popd
 	)
 
+	exit /b 0
+
+
+rem "Path" "@var Filename"
+:_filename
+	endlocal & set "%~2=%~nx1"
 	exit /b 0
 
 
@@ -863,17 +884,19 @@ rem "Section" "Key" "Variable name (optional)"
 	exit /b !ERRORLEVEL!
 
 
-rem "Application ID"
+rem "Directory" "@var result"
 :_app_get_version
-	for /f "usebackq tokens=* delims=" %%i in (`2^>nul dir /b /s /a-d /o-s "!PINT_APPS_DIR!\%~1\*.exe"`) do (
+	for /f "usebackq tokens=* delims=" %%i in (`2^>nul dir /b /s /a-d /o-s "%~1\*.exe"`) do (
 		SET "_exefile=%%i"
 		SET "_exefile=!_exefile:\=\\!"
-		for /f "usebackq tokens=1 skip=1 delims= " %%g in (`2^>nul wmic datafile where name^="!_exefile!" get version`) do (
-			SET _ver=%%g
-			for /L %%g in (1,1,4) do (
+		for /f "usebackq tokens=2 delims=^= " %%a in (`2^>nul wmic datafile where name^="!_exefile!" get version /value`) do (
+			SET _ver=%%a
+			set _ver=!_ver:~0,-1!
+			for /L %%x in (1,1,4) do (
 				if "!_ver:~-2!"==".0" set _ver=!_ver:~0,-2!
 			)
-			call :_write_log %1 version "!_ver!"
+			if not defined _ver exit /b 1
+			endlocal & set %~2=!_ver!
 			exit /b 0
 		)
 		exit /b 1
@@ -934,7 +957,6 @@ rem "INI file path" "Section" "Key" "Variable name (optional)"
 
 rem "INI file path" "Section" "Key" "@var Value"
 :_write_ini
-
 	if "%~1"=="" (
 		exit /b 1
 	)
@@ -1097,8 +1119,12 @@ WScript.quit(0);
 
 switch ($env:_COMMAND) {
 	download-file {
-		(new-object System.Net.WebClient).DownloadFile($env:_PARAM_1, $env:_PARAM_2)
-		if ($env:_PARAM_2 -and !(Test-Path $env:_PARAM_2)) {
+		try {
+			(new-object System.Net.WebClient).DownloadFile($env:_PARAM_1, $env:_PARAM_2)
+			if ($env:_PARAM_2 -and !(Test-Path $env:_PARAM_2)) {
+				exit 1
+			}
+		} catch {
 			exit 1
 		}
 	}
