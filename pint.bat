@@ -35,7 +35,7 @@ SET ROBOCOPY="%WINDIR%\system32\robocopy.exe"
 
 rem Functions accessible directly from the command line
 SET BAT_FUNCTIONS=usage self-update update subscribe subscribed install reinstall installed unsubscribe
-SET BAT_FUNCTIONS=!BAT_FUNCTIONS! download remove purge upgrade search outdated add pin unpin
+SET BAT_FUNCTIONS=!BAT_FUNCTIONS! download remove purge upgrade search outdated add pin unpin _get_url_info
 SET JS_FUNCTIONS=unzip
 SET PS_FUNCTIONS=shim download-file
 
@@ -321,31 +321,38 @@ rem "Application ID" "File URL"
 	exit /b !ERRORLEVEL!
 
 
+rem "Application ID []"
 :pin
 	for %%x in (%*) do call :_package_pin "%%~x"
 	exit /b !ERRORLEVEL!
 
+rem "Application ID []"
 :unpin
 	for %%x in (%*) do call :_package_unpin "%%~x"
 	exit /b !ERRORLEVEL!
 
+rem "Application ID []"
 :remove
 	for %%x in (%*) do call :_package_remove "%%~x"
 	exit /b !ERRORLEVEL!
 
+rem "Application ID []"
 :download
 	for %%x in (%*) do call :_package_download "%%~x"
 	exit /b !ERRORLEVEL!
 
+rem "Application ID []"
 :install
 	for %%x in (%*) do call :_package_install "%%~x"
 	exit /b !ERRORLEVEL!
 
+rem "Application ID []"
 :reinstall
 	for %%x in (%*) do call :_package_force_install "%%~x"
 	exit /b !ERRORLEVEL!
 
 
+rem "Application ID []"
 :upgrade
 	if not "%~1"=="" (
 		for %%x in (%*) do (
@@ -359,6 +366,7 @@ rem "Application ID" "File URL"
 	exit /b !ERRORLEVEL!
 
 
+rem "Application ID []"
 :purge
 	if "%~1"=="" (
 		if exist "!PINT_DIST_DIR!" (
@@ -630,44 +638,92 @@ rem "Application ID" "DIST Variable name"
 	)
 
 
-rem "Application ID" "Variable with file URL"
+rem "@ref URL" "@ref Result (without quotes!)"
+:_get_url_info
+	if "!%~1!"=="" ( echo Incorrect arguments. && exit /b 1 )
+	if "%2"=="" ( echo Incorrect arguments. && exit /b 1 )
+	endlocal
+	set "%2[type]="
+	set "%2[size]="
+	set "%2[name]="
+	set "%2[ext]="
+	for /f "tokens=* delims=" %%i in ("!%~1!") do (
+		set "%2[name]=%%~nxi"
+		set "%2[ext]=%%~xi"
+		if not "!%2[ext]!"=="" set "%2[ext]=!%2[ext]:~1!"
+	)
+	set "%2[url]=!%~1!"
+	set "%2[protocol]="
+	set "%2[code]="
+
+	for /f "usebackq tokens=1,* delims=: " %%a in (`%CURL: --fail=% -s -S -I "!%~1!"`) do (
+		set "_key=%%a"
+		if /I "!_key:~0,5!"=="HTTP/" (
+			for /f "tokens=1" %%s in ("%%b") do set "%2[code]=%%~s"
+		)
+		if /I "%%a"=="Content-Type" (
+			for /f "tokens=1 delims=;" %%s in ("%%b") do set "%2[type]=%%s"
+		)
+		if /I "%%a"=="Content-Length" (
+			set "%2[size]=%%b"
+		)
+		if /I "%%a"=="Location" (
+			set "%2[name]=%%~nxb"
+			set "%2[url]=%%~b"
+		)
+		if /I "%%a"=="Content-Disposition" (
+			for /f "tokens=2 delims=^=" %%s in ("%%b") do (
+				set "%2[name]=%%~nxs"
+			)
+		)
+	)
+
+	if "!%2[name]!"=="" exit /b 1
+
+	for /f "tokens=1 delims=?" %%s in ("!%2[name]!") do (
+		set "%2[name]=%%~nxs"
+		set "%2[ext]=%%~xs"
+		if not "!%2[ext]!"=="" set "%2[ext]=!%2[ext]:~1!"
+	)
+
+	if /I "!%2[url]:~0,4!"=="http" (
+		set "%2[protocol]=0"
+		if not "!%2[code]!"=="200" exit /b 1
+	)
+	if /I "!%2[url]:~0,4!"=="ftp:" (
+		set "%2[protocol]=1"
+		if "!%2[size]!"=="" exit /b 1
+	)
+
+rem		echo "!%2[type]!"
+rem		echo "!%2[size]!"
+rem		echo "!%2[name]!"
+rem		echo "!%2[ext]!"
+rem		echo "!%2[url]!"
+rem		echo "!%2[protocol]!"
+rem		echo "!%2[code]!"
+
+	if "!%2[ext]!"=="" exit /b 1
+	exit /b 0
+
+
+rem "Application ID" "@ref URL"
 :_url_is_updated
 	call :_read_log %1 size || (
 		echo %~1 is not tracked by Pint, try to reinstall.
 		exit /b 3
 	)
 
-	set /a _outdated=1
-	set /a _html=0
-
-	for /f "usebackq tokens=1,2 delims=:; " %%a in (`!CURL! -s -S -I "!%~2!"`) do (
-		if /I "%%a"=="Content-Type" (
-			if "%%b"=="text/html" (
-				set /a _html=1
-			) else (
-				set /a _html=0
-			)
-		) else (
-			if /I "%%a"=="Content-Length" (
-				if "%%b"=="!size!" (
-					set /a _outdated=0
-				) else (
-					set /a _outdated=1
-				)
-			)
-		)
-	)
-
-	if not defined _outdated (
+	call :_get_url_info %2 _res || (
 		echo Unable to check updates for %~1.
 		exit /b 2
 	)
 
-	if !_html!==1 (
+	if /I "!_res[type]:~0,5!"=="text/" (
 		echo The %~1 server responded with a html page.
 		exit /b 2
 	) else (
-		if !_outdated!==0 (
+		if "!_res[size]!"=="!size!" (
 			echo %~1 is up to date.
 			exit /b 1
 		) else (
@@ -685,10 +741,12 @@ rem "Application ID" "Source directory"
 	exit /b !ERRORLEVEL!
 
 
-rem "@var File path" "@var Destination directory"
+rem "@ref File path" "@ref Destination directory"
 :_unpack
 	for /f "tokens=* delims=" %%i in ("!%~1!") do (
 		echo Unpacking %%~nxi
+
+		if not exist "!%~2!" md "!%~2!"
 
 		if /I "%%~xi"==".msi" (
 			>nul !MSIEXEC! /a "%%i" /norestart /qn TARGETDIR="!%~2!"
@@ -696,7 +754,7 @@ rem "@var File path" "@var Destination directory"
 			call :_where 7z
 			if errorlevel 1 (
 				if /I "%%~xi"==".zip" (
-					>nul !JSCRIPT! unzip "%%i" "!%~2!"
+					!JSCRIPT! unzip "%%i" "!%~2!"
 				) else (
 					exit /b 1
 				)
@@ -708,7 +766,7 @@ rem "@var File path" "@var Destination directory"
 	exit /b !ERRORLEVEL!
 
 
-rem "Directory" "Search string" "@var Result path"
+rem "Directory" "Search string" "@ref Result path"
 :_get_root
 	endlocal & set "%~3="
 	cd /D %1 || exit /b 1
@@ -722,7 +780,7 @@ rem "Directory" "Search string" "@var Result path"
 	exit /b 1
 
 
-rem "Application ID" "@var File path" "Destination directory"
+rem "Application ID" "@ref File path" "Destination directory"
 :install_file
 	echo Installing %~1 to %~3
 
@@ -752,7 +810,7 @@ rem "Application ID" "@var File path" "Destination directory"
 
 		if defined base (
 			call :_get_root "!_tempdir!" "!base!" _base_dir && (
-				cd /D "!_base_dir!\.." || exit /b !ERRORLEVEL!
+				cd /D "!_base_dir!\.."
 			)
 		)
 
@@ -795,46 +853,18 @@ rem "Application ID" "Directory" "delete"
 	exit /b 0
 
 
-rem "@var Download URL" "@var Destination directory" "Download URL"
+rem "@ref Download URL" "@ref Destination directory" "Download URL"
 :_download
+	echo Downloading !%~1!
+
 	SET "DEST_FILE="
 	
-	echo Downloading !%~1!
-	
-	if not exist "!%~2!" (
-		md "!%~2!"
-	) else (
-		if not "%~x1"=="" (
-			for /f "usebackq tokens=* delims=" %%i in (`2^>nul dir /b /s /a-d "!%~2!"`) do (
-				if "%%~nxi"=="%~nx1" (
-					SET "DEST_FILE=%%~nxi"
-				)
-			)
-		)
-
-		if not defined DEST_FILE (
-			for /f "usebackq tokens=* delims=" %%i in (`2^>nul dir /b /s /a-d "!%~2!"`) do (
-				if not defined DEST_FILE (
-					SET "DEST_FILE=%%~nxi"
-				) else (
-					SET "DEST_FILE="
-					rd /S /Q "!%~2!"
-					goto :_continue_curl
-				)
-			)
-		)
-	)
-
-	:_continue_curl
+	if not exist "!%~2!" md "!%~2!"
+	if not "%~x3"=="" SET "DEST_FILE=%~nx3"
 
 	call :_where curl || (
-		if not defined DEST_FILE (
-			call :_filename "!%~1!" DEST_FILE
-			set "DEST_FILE=!DEST_FILE:?=!"
-			set "DEST_FILE=!DEST_FILE:;=!"
-		)
-		if not defined DEST_FILE set "DEST_FILE=download"
-		call !PINT! download-file "!%~1!" "!%~2!\!DEST_FILE!" && exit /b 0
+		if not defined DEST_FILE set "DEST_FILE=download.zip"
+		call !PINT! download-file "%~1" "!%~2!\!DEST_FILE!" && exit /b 0
 		echo Download FAILED.
 		exit /b 1
 	)
@@ -846,6 +876,7 @@ rem "@var Download URL" "@var Destination directory" "Download URL"
 		)
 	) else (
 		pushd "!%~2!"
+		echo !CURL! -O -J "!%~1!"
 		"%ComSpec%" /d /c !CURL! -O -J "!%~1!" || (
 			echo FAILED
 			popd
@@ -857,7 +888,7 @@ rem "@var Download URL" "@var Destination directory" "Download URL"
 	exit /b 0
 
 
-rem "Path" "@var Filename"
+rem "Path" "@ref Filename"
 :_filename
 	endlocal & set "%~2=%~nx1"
 	exit /b 0
@@ -881,7 +912,7 @@ rem "Section" "Key" "Variable name (optional)"
 	exit /b !ERRORLEVEL!
 
 
-rem "Directory" "@var result"
+rem "Directory" "@ref result"
 :_app_get_version
 	for /f "usebackq tokens=* delims=" %%i in (`2^>nul dir /b /s /a-d /o-s "%~1\*.exe"`) do (
 		SET "_exefile=%%i"
@@ -955,7 +986,7 @@ rem "INI file path" "Section" "Key" "Variable name (optional)"
 	exit /b 1
 
 
-rem "INI file path" "Section" "Key" "@var Value"
+rem "INI file path" "Section" "Key" "@ref Value"
 :_write_ini
 	if "%~2"=="" exit /b 1
 	if "%~1"=="" exit /b 1
@@ -1113,7 +1144,7 @@ switch (WScript.Arguments(0)) {
 		if (!fso.FolderExists(dir)) fso.CreateFolder(dir);
 	    var zip = app.NameSpace(WScript.Arguments(1));
 	    app.NameSpace(WScript.Arguments(2)).CopyHere(zip.Items(), 4 + 16);
-		if (!fso.FileExists(file + "\\" + zip.Items().Item(0))) {
+		if (!fso.FileExists(dir + "\\" + zip.Items().Item(0))) {
 			WScript.quit(1);
 		}
 		WScript.quit(0);
@@ -1127,7 +1158,7 @@ WScript.quit(0);
 switch ($env:_COMMAND) {
 	download-file {
 		try {
-			(new-object System.Net.WebClient).DownloadFile($env:_PARAM_1, $env:_PARAM_2)
+			(new-object System.Net.WebClient).DownloadFile([Environment]::GetEnvironmentVariable($env:_PARAM_1), $env:_PARAM_2)
 			if ($env:_PARAM_2 -and !(Test-Path $env:_PARAM_2)) {
 				exit 1
 			}
