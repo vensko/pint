@@ -4,6 +4,7 @@
 @setlocal enabledelayedexpansion
 
 rem PINT - Portable INsTaller
+rem https://github.com/vensko/pint
 
 rem Set variables if they weren't overriden earlier
 if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0packages"
@@ -33,14 +34,13 @@ SET MSIEXEC="%WINDIR%\system32\msiexec.exe"
 SET ROBOCOPY="%WINDIR%\system32\robocopy.exe"
 
 rem Functions accessible directly from the command line
-SET BAT_FUNCTIONS=usage self-update update subscribe subscribed install reinstall installed _write_ini _read_ini
+SET BAT_FUNCTIONS=usage self-update update subscribe subscribed install reinstall installed unsubscribe
 SET BAT_FUNCTIONS=!BAT_FUNCTIONS! download remove purge upgrade search outdated add pin unpin
-SET JS_FUNCTIONS=unzip autodl
+SET JS_FUNCTIONS=unzip
 SET PS_FUNCTIONS=shim download-file
 
 SET CURL=curl --insecure --ssl-no-revoke --ssl-allow-beast --progress-bar --remote-header-name --location
 SET CURL=!CURL! --create-dirs --fail --max-redirs 5 --retry 2 --retry-delay 1 -X GET
-
 SET POWERSHELL=powershell -NonInteractive -NoLogo -NoProfile -executionpolicy bypass
 SET JSCRIPT="%WINDIR%\system32\cscript.exe" //nologo //e:jscript !PINT!
 
@@ -121,10 +121,10 @@ rem *****************************************
 	echo.
 	echo Usage:
 	echo pint update^|self-update^|usage^|subscribed^|installed^|search^|outdated^|upgrade
-	echo pint download^|install^|reinstall^|installed^|purge^|pin^|unpin ^<package(s)^>
-	echo pint search^|outdated^|upgrade^|remove^|purge^|pin^|unpin ^<package(s)^>
+	echo pint download^|install^|reinstall^|installed^|purge^|pin^|unpin^|
+	echo      search^|outdated^|upgrade^|remove^|purge^|pin^|unpin ^<package(s)^>
 	echo pint add ^<package^> ^<url^>
-	echo pint subscribe ^<packages-ini-url^>
+	echo pint subscribe^|unsubscribe ^<packages-ini-url^>
 
 	exit /b 0
 
@@ -132,56 +132,62 @@ rem *****************************************
 :self-update
 	echo Fetching !PINT_SELF_URL!
 
-	if exist !PINT_TEMP_FILE! (
-		del !PINT_TEMP_FILE!
+	if exist !PINT_TEMP_FILE! del !PINT_TEMP_FILE!
+
+	"%ComSpec%" /d /c !CURL! -s -S -o !PINT_TEMP_FILE! "!PINT_SELF_URL!" && (
+		>nul !FINDSTR! /L /C:"PINT - Portable INsTaller" !PINT_TEMP_FILE! && (
+			>nul move /Y !PINT_TEMP_FILE! !PINT! && (
+				echo Pint was updated to the latest version.
+				exit /b 0
+			)
+		)
 	)
 
-	"%ComSpec%" /d /c !CURL! -s -S -o !PINT_TEMP_FILE! "!PINT_SELF_URL!" || (
-		echo Self-update failed^^!
-		exit /b 1
-	)
-
-	>nul !FINDSTR! /L /C:"PINT - Portable INsTaller" !PINT_TEMP_FILE! || (
-		echo Self-update failed^^!
-		exit /b 1
-	)
-	
-	>nul move /Y !PINT_TEMP_FILE! !PINT!
-
-	echo Pint was updated to the latest version.
-	exit /b 0
+	echo Self-update failed^^!
+	exit /b 1
 
 
 :update
-	SET /a SRC_COUNT=0
-
+	echo Updating the database...
 	if not exist !PINT_SRC_FILE! (
 		>!PINT_SRC_FILE! echo !PINT_PACKAGES!
 	)
 
 	>nul copy /y NUL !PINT_PACKAGES_FILE!
+	SET /a _count=0
 
 	for /f "usebackq tokens=* delims=" %%f in ("!PINT_SRC_FILE:~1,-1!") do (
 		set /p ="Fetching %%f "<nul
+		set /a _count+=1
 
-		"%ComSpec%" /d /c !CURL! --compressed -s -S -o !PINT_TEMP_FILE! "%%f"
-
-		if errorlevel 1 (
+		>>!PINT_PACKAGES_FILE! "%ComSpec%" /d /c !CURL! --compressed -s -S "%%f" || (
 			echo - failed^^!
-		) else (
-			>>!PINT_PACKAGES_FILE! type !PINT_TEMP_FILE!
-			SET /a SRC_COUNT+=1
-			echo.
+			set /a _count-=1
 		)
 	)
 
-	set /p ="Merged !SRC_COUNT! source"<nul
-
-	if not !SRC_COUNT!==1 (
-		echo s
-	)
+	echo.
+	set /p ="Merged !_count! source"<nul
+	if not !_count!==1 (echo s) else (echo.)
+	echo.
 
 	exit /b 0
+
+
+rem "Term"
+:search
+	if not exist !PINT_PACKAGES_FILE! (
+		echo Unable to find a package database, updating...
+		call :update
+	)
+
+	if exist !PINT_PACKAGES_FILE_USER! (
+		!FINDSTR! /I /B /R "\s*\[.*%~1.*\]" !PINT_PACKAGES_FILE_USER! | !SORT!
+	)
+
+	!FINDSTR! /I /B /R "\s*\[.*%~1.*\]" !PINT_PACKAGES_FILE! | !SORT!
+
+	exit /b !ERRORLEVEL!
 
 
 :subscribed
@@ -189,60 +195,51 @@ rem *****************************************
 	exit /b !ERRORLEVEL!
 
 
-rem "Term"
-:search
-	if not exist !PINT_PACKAGES_FILE! (
-		call :update
-	)
-	if exist !PINT_PACKAGES_FILE_USER! (
-		!FINDSTR! /I /R "^^\[.*%~1" !PINT_PACKAGES_FILE_USER! | !SORT!
-	)
-	!FINDSTR! /I /R "^^\[.*%~1" !PINT_PACKAGES_FILE! | !SORT!
-
+rem "INI URL"
+:subscribe
 	if "%~1"=="" (
-		exit /b 0
+		echo Enter an URL^^!
+		exit /b 1
 	)
 
+	>nul !FINDSTR! /L /X "%~1" !PINT_SRC_FILE! && (
+		echo This URL is already registered.
+		exit /b 1
+	)
+
+	>!PINT_TEMP_FILE! echo %~1
+	>>!PINT_TEMP_FILE! type !PINT_SRC_FILE!
+	>nul move /Y !PINT_TEMP_FILE! !PINT_SRC_FILE!
+
+	echo Registered %~1
 	echo.
-	echo Search results from PortableApps.com:
+	echo Your new source list:
+	call :subscribed
 
-	set _term=%~1
-	set _term=!_term:"=\"!
-	set _term=!_term:'=\'!
-	
-	set _found=
-	for /f "usebackq tokens=* delims=" %%i in (`xidel "http^://portableapps.com/apps" -e "//a[contains(@href, '/apps/') and text() [matches(.,'!_term!','i')]]/resolve-uri(normalize-space(@href), base-uri())" --quiet --user-agent="!PINT_USER_AGENT!"`) do (
-		echo %%i
-		set _found=1
-	)
-	if not defined _found (
-		echo ^(No matches^)
-	)
-
-	echo.
-	echo Search results from The Portable Freeware Collection:
-	set _found=
-	for /f "usebackq tokens=* delims=" %%i in (`xidel "http^://www.portablefreeware.com/index.php?q=!_term!" -e "//a[@class='appName']/concat(.[normalize-space()], ' [', resolve-uri(normalize-space(@href), base-uri()), ']')" --quiet --user-agent="!PINT_USER_AGENT!"`) do (
-		echo %%i
-		set _found=1
-	)
-	if not defined _found (
-		echo ^(No matches^)
-	)
-	
 	exit /b 0
 
 
 rem "INI URL"
-:subscribe
-	SET URL="%~1"
-	>nul !FINDSTR! /L /X !URL! !PINT_SRC_FILE! && (
-		echo This URL is already registered.
+:unsubscribe
+	if "%~1"=="" (
+		echo Enter an URL^^!
 		exit /b 1
 	)
-	>>!PINT_SRC_FILE! echo !URL:~1,-1!
-	echo Registered !URL:~1,-1!
-	exit /b 0
+
+	>nul !FINDSTR! /L /X "%~1" !PINT_SRC_FILE! || (
+		echo This URL is not registered.
+		exit /b 1
+	)
+
+	>!PINT_TEMP_FILE! !FINDSTR! /X /L /V "%~1" !PINT_SRC_FILE!
+	>nul move /Y !PINT_TEMP_FILE! !PINT_SRC_FILE!
+
+	echo Unregistered %~1
+	echo.
+	echo Your new source list:
+	call :subscribed
+
+	exit /b !ERRORLEVEL!
 
 
 :installed
@@ -348,6 +345,7 @@ rem "Application ID" "File URL"
 	for %%x in (%*) do call :_package_force_install "%%~x"
 	exit /b !ERRORLEVEL!
 
+
 :upgrade
 	if not "%~1"=="" (
 		for %%x in (%*) do (
@@ -359,6 +357,7 @@ rem "Application ID" "File URL"
 		call :_package_upgrade "%%x"
 	)
 	exit /b !ERRORLEVEL!
+
 
 :purge
 	if "%~1"=="" (
@@ -781,7 +780,9 @@ rem "Application ID" "@var File path" "Destination directory"
 
 rem "Application ID"
 :_is_installed
-	>nul 2>nul !FINDSTR! /I /L /C:"[%~1]" !PINT_PACKAGES_FILE_USER! || >nul 2>nul !FINDSTR! /I /L /C:"[%~1]" !PINT_PACKAGES_FILE! || exit /b 2
+	>nul 2>nul !FINDSTR! /I /L /C:"[%~1]" !PINT_PACKAGES_FILE_USER! || (
+		>nul 2>nul !FINDSTR! /I /L /C:"[%~1]" !PINT_PACKAGES_FILE! || exit /b 2
+	)
 	2>nul dir /b "!PINT_APPS_DIR!\%~1\*.*" | >nul 2>nul !FIND! /v "" && exit /b 0
 	exit /b 1
 
@@ -834,7 +835,7 @@ rem "@var Download URL" "@var Destination directory" "Download URL"
 		)
 		if not defined DEST_FILE set "DEST_FILE=download"
 		call !PINT! download-file "!%~1!" "!%~2!\!DEST_FILE!" && exit /b 0
-		echo Download FAILED. Install curl, in many cases this may help.
+		echo Download FAILED.
 		exit /b 1
 	)
 
@@ -914,9 +915,6 @@ rem "INI file path" "Section" "Key" "Variable name (optional)"
 	if "%~3"=="" (
 		exit /b 1
 	)
-	if not exist "%~1" (
-		exit /b 1
-	)
 
 	set _section=
 	set _key=
@@ -957,12 +955,6 @@ rem "INI file path" "Section" "Key" "Variable name (optional)"
 	exit /b 1
 
 
-rem "Variable"
-:_trim
-	"set tempvar=%*"
-	exit /b 0
-
-
 rem "INI file path" "Section" "Key" "@var Value"
 :_write_ini
 	if "%~2"=="" exit /b 1
@@ -981,10 +973,9 @@ rem "INI file path" "Section" "Key" "@var Value"
 			exit /b !ERRORLEVEL!
 		)
 		rem No section
-		>nul !FIND! "[!section!]" < !_file! || (
+		>nul !FIND! "[!section!]" !_file! || (
 			>>!_file! echo [!section!]
 			>>!_file! echo %~3 = %~4
-			>nul !FIND! "[!section!]" < !_file!
 			exit /b !ERRORLEVEL!
 		)
 	)
