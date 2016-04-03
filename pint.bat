@@ -33,7 +33,7 @@ SET MSIEXEC="%WINDIR%\system32\msiexec.exe"
 SET ROBOCOPY="%WINDIR%\system32\robocopy.exe"
 
 rem Functions accessible directly from the command line
-SET BAT_FUNCTIONS=usage self-update update subscribe subscribed install reinstall
+SET BAT_FUNCTIONS=usage self-update update subscribe subscribed install reinstall installed _write_ini _read_ini
 SET BAT_FUNCTIONS=!BAT_FUNCTIONS! download remove purge upgrade search outdated add pin unpin
 SET JS_FUNCTIONS=unzip autodl
 SET PS_FUNCTIONS=shim download-file
@@ -58,7 +58,7 @@ if not exist !PINT_HISTORY_FILE! (
 	>nul copy /y NUL !PINT_HISTORY_FILE!
 )
 
-if not %1==update (
+if not "%~1"=="update" (
 	if not exist !PINT_PACKAGES_FILE! (
 		call :update
 	)
@@ -246,32 +246,30 @@ rem "INI URL"
 
 
 :installed
-	if "%*"=="" (
+	if "%~1"=="" (
 		2>nul dir /b /ad "!PINT_APPS_DIR!"
 		exit /b !ERRORLEVEL!
 	)
 
 	for %%x in (%*) do (
-		call :_is_installed %%x
-		if errorlevel 1 (
-			echo %%x is NOT installed.
-		) else (
-			echo %%x is installed.
-		)
+		call :_is_installed "%%~x"
+		if "!ERRORLEVEL!"=="2" echo %%~x is NOT tracked by Pint.
+		if "!ERRORLEVEL!"=="1" echo %%~x is NOT installed.
+		if "!ERRORLEVEL!"=="0" echo %%~x is installed.
 	)
 
 	exit /b 0
 
 
 :outdated
-	if not "%*"=="" (
+	if not "%~1"=="" (
 		for %%x in (%*) do (
-			call :_package_outdated %%x
+			call :_package_outdated "%%~x"
 		)
 		exit /b !ERRORLEVEL!
 	)
 	for /f "usebackq tokens=* delims=" %%x in (`2^>nul dir /b /ad "!PINT_APPS_DIR!"`) do (
-		call :_package_outdated %%x
+		call :_package_outdated "%%x"
 	)
 	exit /b !ERRORLEVEL!
 
@@ -327,38 +325,38 @@ rem "Application ID" "File URL"
 
 
 :pin
-	for %%x in (%*) do call :_package_pin %%x
+	for %%x in (%*) do call :_package_pin "%%~x"
 	exit /b !ERRORLEVEL!
 
 :unpin
-	for %%x in (%*) do call :_package_unpin %%x
+	for %%x in (%*) do call :_package_unpin "%%~x"
 	exit /b !ERRORLEVEL!
 
 :remove
-	for %%x in (%*) do call :_package_remove %%x
+	for %%x in (%*) do call :_package_remove "%%~x"
 	exit /b !ERRORLEVEL!
 
 :download
-	for %%x in (%*) do call :_package_download %%x
+	for %%x in (%*) do call :_package_download "%%~x"
 	exit /b !ERRORLEVEL!
 
 :install
-	for %%x in (%*) do call :_package_install %%x
+	for %%x in (%*) do call :_package_install "%%~x"
 	exit /b !ERRORLEVEL!
 
 :reinstall
-	for %%x in (%*) do call :_package_force_install %%x
+	for %%x in (%*) do call :_package_force_install "%%~x"
 	exit /b !ERRORLEVEL!
 
 :upgrade
 	if not "%~1"=="" (
 		for %%x in (%*) do (
-			call :_package_upgrade %%x
+			call :_package_upgrade "%%~x"
 		)
 		exit /b !ERRORLEVEL!
 	)
 	for /f "usebackq tokens=* delims=" %%x in (`2^>nul dir /b /ad "!PINT_APPS_DIR!"`) do (
-		call :_package_upgrade %%x
+		call :_package_upgrade "%%x"
 	)
 	exit /b !ERRORLEVEL!
 
@@ -371,7 +369,7 @@ rem "Application ID" "File URL"
 	)
 
 	for %%x in (%*) do (
-		call :_package_purge %%x
+		call :_package_purge "%%~x"
 	)
 	exit /b !ERRORLEVEL!
 
@@ -397,8 +395,8 @@ rem "Application ID"
 	call :_is_installed %1 && (
 		echo Uninstalling %~1...
 	)
-	call :_shims %1 delete
 	if exist "!PINT_APPS_DIR!\%~1" (
+		call :_shims %1 "!PINT_APPS_DIR!\%~1" delete
 		rd /S /Q "!PINT_APPS_DIR!\%~1"
 	)
 	exit /b 0
@@ -422,11 +420,16 @@ rem "Application ID"
 rem "Application ID"
 :_package_outdated
 	call :_is_installed %1 || (
-		echo %1 is not installed.
-		exit /b 1
+		if "!ERRORLEVEL!"=="2" (
+			echo %~1 is not tracked by Pint.
+			exit /b 1
+		) else (
+			echo %~1 is not installed, try to reinstall.
+			exit /b 1
+		)
 	)
 
-	call :_get_dist_link %1 dist || (
+	>nul call :_get_dist_link %1 dist || (
 		echo Unable to get a link for %1.
 		exit /b 1
 	)
@@ -435,7 +438,7 @@ rem "Application ID"
 		exit /b 1
 	)
 
-	echo %1 is OUTDATED.
+	echo %~1 is OUTDATED.
 	exit /b 0
 
 
@@ -464,7 +467,7 @@ rem "Application ID"
 
 	call :_db %1 deps && (
 		for %%x in (!deps!) do (
-			call :_package_install %%x
+			call :_package_install "%%~x"
 		)
 	)
 
@@ -490,6 +493,12 @@ rem "Application ID"
 		echo %~1 is already installed.
 		exit /b 0
 	)
+
+	if errorlevel 2 (
+		echo %~1 is not tracked by Pint.
+		exit /b 1
+	)
+
 	call :_package_force_install %1
 	exit /b !ERRORLEVEL!
 
@@ -497,8 +506,13 @@ rem "Application ID"
 rem "Application ID"
 :_package_upgrade
 	call :_is_installed %1 || (
-		call :_package_install %1
-		exit /b !ERRORLEVEL!
+		if errorlevel 2 (
+			echo %~1 is not tracked by Pint.
+			exit /b 1
+		) else (
+			call :_package_install %1
+			exit /b !ERRORLEVEL!
+		)
 	)
 
 	call :_is_upgradable %1 || (
@@ -507,7 +521,7 @@ rem "Application ID"
 
 	call :_db %1 deps && (
 		for %%x in (!deps!) do (
-			call :_package_upgrade "%%x"
+			call :_package_upgrade "%%~x"
 		)
 	)
 
@@ -585,7 +599,7 @@ rem "Application ID" "DIST Variable name"
 
 		echo Extracting a download link from !dist!
 
-		for /f "usebackq tokens=* delims=" %%i in (`xidel "!dist!" !follow! --quiet --extract "(!link:%%=%%%%!)[1]" --header="Referer^: !dist!" --user-agent="!PINT_USER_AGENT!"`) do (
+		for /f "usebackq tokens=* delims=" %%i in (`2^>nul xidel "!dist!" !follow! --quiet --extract "(!link:%%=%%%%!)[1]" --header="Referer^: !dist!" --user-agent="!PINT_USER_AGENT!"`) do (
 			set "dist=%%i"
 			SET _parsed=1
 		)
@@ -620,7 +634,7 @@ rem "Application ID" "DIST Variable name"
 rem "Application ID" "Variable with file URL"
 :_url_is_updated
 	call :_read_log %1 size || (
-		echo %1 is not tracked by Pint, try to reinstall.
+		echo %~1 is not tracked by Pint, try to reinstall.
 		exit /b 3
 	)
 
@@ -665,35 +679,40 @@ rem "Application ID" "Variable with file URL"
 
 rem "Application ID" "Source directory"
 :_install_app
-	for /f "usebackq tokens=* delims=" %%i in (`2^>nul dir /b /s /a-d %2`) do (
-		call :install_file %1 "%%i" "!PINT_APPS_DIR!\%~1"
-		exit /b !ERRORLEVEL!
-	)
-	exit /b 1
+	set "_archive="
+	for /f "usebackq tokens=* delims=" %%i in (`2^>nul dir /b /s /a-d %2`) do set "_archive=%%i"
+	if not defined _archive exit /b 1
+	call :install_file %1 _archive "!PINT_APPS_DIR!\%~1"
+	exit /b !ERRORLEVEL!
 
 
-rem "File path" "Destination directory"
+rem "@var File path" "@var Destination directory"
 :_unpack
-	echo Unpacking %~nx1
+	for /f "tokens=* delims=" %%i in ("!%~1!") do (
+		echo Unpacking %%~nxi
 
-	if not exist %2 md %2
-
-	if /I "%~x1"==".msi" (
-		>nul !MSIEXEC! /a %1 /norestart /qn TARGETDIR=%2
-	) else (
-		if /I "%~x1"==".zip" (
-			call :_unzip %1 %2
+		if /I "%%~xi"==".msi" (
+			>nul !MSIEXEC! /a "%%i" /norestart /qn TARGETDIR="!%~2!"
 		) else (
-			call :_un7zip %1 %2
+			call :_where 7z
+			if errorlevel 1 (
+				if /I "%%~xi"==".zip" (
+					>nul !JSCRIPT! unzip "%%i" "!%~2!"
+				) else (
+					exit /b 1
+				)
+			) else (
+				>nul "%ComSpec%" /d /c 7z x -y -aoa -o"!%~2!" "%%i"
+			)
 		)
 	)
-
 	exit /b !ERRORLEVEL!
 
 
 rem "Directory" "Search string" "@var Result path"
 :_get_root
-	cd /D %1
+	endlocal & set "%~3="
+	cd /D %1 || exit /b 1
 	for /f "usebackq tokens=* delims=" %%i in (`dir /b /s`) do (
 		set "_file=%%i"
 		if not "!_file!"=="!_file:%~2=!" (
@@ -704,22 +723,23 @@ rem "Directory" "Search string" "@var Result path"
 	exit /b 1
 
 
-rem "Application ID" "File path" "Destination directory"
+rem "Application ID" "@var File path" "Destination directory"
 :install_file
 	echo Installing %~1 to %~3
 
 	set "type="
-	if /I "%~x2"==".exe" call :_db %1 type
+	if /I "!%~2:~-4!"==".exe" call :_db %1 type
 
 	if /I "!type!"=="standalone" (
 		if not exist %3 md %3
-		>nul copy /Y %2 /B "%~3\%~nx2"
+		call :_filename "!%~2!" _filename
+		>nul copy /Y "!%~2!" /B "%~3\!_filename!"
 	) else (
 		set "_tempdir=%TEMP%\pint\%~1%RANDOM%"
 		if not exist "!_tempdir!" md "!_tempdir!"
 		cd /D "!_tempdir!" || exit /b !ERRORLEVEL!
 
-		call :_unpack %2 "!_tempdir!" || exit /b !ERRORLEVEL!
+		call :_unpack %2 _tempdir || exit /b !ERRORLEVEL!
 
 		if "%PROCESSOR_ARCHITECTURE%"=="x86" (
 			call :_db %1 base
@@ -737,62 +757,40 @@ rem "Application ID" "File path" "Destination directory"
 			)
 		)
 
-		if defined xf set "xf=/XF !xf!"
-		if defined xd set "xd=/XD !xd!"
+		set "xf=/XF !xf! $R0"
+		set "xd=/XD !xd! $PLUGINSDIR $TEMP"
 		>nul !ROBOCOPY! "!cd!" %3 /E /PURGE /NJS /NJH /NFL /NDL /ETA !xf! !xd!
 		cd /D %3
 		rd /Q /S "%TEMP%\pint"
 	)
 
-	call :_get_file_properties %2 _size _filemtime
-	call :_write_log %1 size !_size!
-	call :_write_log %1 filemtime "!_filemtime!"
+	for /f "tokens=* delims=" %%i in ("!%~2!") do (
+		call :_write_log %1 size "%%~zi"
+		call :_write_log %1 filemtime "%%~ti"
+	)
 
 	call :_app_get_version %3 _v && (
 		echo Detected version !_v!
 		call :_write_log %1 version "!_v!"
 	)
 
-	call :_shims %1
+	call :_shims %1 %3
 
-	exit /b !ERRORLEVEL!
-
-
-rem "File path" "@var Size" "@var File time"
-:_get_file_properties
-	endlocal
-	set "%~2=%~z1"
-	set "%~3=%~t1"
-	exit /b !ERRORLEVEL!
-
-
-rem "Zip file path" "Destination directory"
-:_unzip
-	call :_where 7z && (
-		call :_un7zip %*
-		exit /b !ERRORLEVEL!
-	)
-	>nul !JSCRIPT! unzip %*
-	exit /b !ERRORLEVEL!
-
-
-rem "@var 7zip file path" "@var Destination directory"
-:_un7zip
-	>nul 1>nul call 7z x -y -bso1 -bsp0 -aoa -o%2 %1
 	exit /b !ERRORLEVEL!
 
 
 rem "Application ID"
 :_is_installed
-	>nul 2>nul dir /b "!PINT_APPS_DIR!\%~1\*.*"
-	exit /b !ERRORLEVEL!
+	>nul 2>nul !FINDSTR! /I /L /C:"[%~1]" !PINT_PACKAGES_FILE_USER! || >nul 2>nul !FINDSTR! /I /L /C:"[%~1]" !PINT_PACKAGES_FILE! || exit /b 2
+	2>nul dir /b "!PINT_APPS_DIR!\%~1\*.*" | >nul 2>nul !FIND! /v "" && exit /b 0
+	exit /b 1
 
 
-rem "Application ID" "delete"
+rem "Application ID" "Directory" "delete"
 :_shims
 	call :_db %1 shim
 	call :_db %1 noshim
-	call !PINT! shim "!PINT_APPS_DIR!\%~1" "!shim!" "!noshim!" %2
+	call !PINT! shim %2 "!shim!" "!noshim!" %3
 	exit /b 0
 
 
@@ -808,7 +806,7 @@ rem "@var Download URL" "@var Destination directory" "Download URL"
 		if not "%~x1"=="" (
 			for /f "usebackq tokens=* delims=" %%i in (`2^>nul dir /b /s /a-d "!%~2!"`) do (
 				if "%%~nxi"=="%~nx1" (
-					SET DEST_FILE=%%~nxi
+					SET "DEST_FILE=%%~nxi"
 				)
 			)
 		)
@@ -816,9 +814,9 @@ rem "@var Download URL" "@var Destination directory" "Download URL"
 		if not defined DEST_FILE (
 			for /f "usebackq tokens=* delims=" %%i in (`2^>nul dir /b /s /a-d "!%~2!"`) do (
 				if not defined DEST_FILE (
-					SET DEST_FILE=%%~nxi
+					SET "DEST_FILE=%%~nxi"
 				) else (
-					SET DEST_FILE=
+					SET "DEST_FILE="
 					rd /S /Q "!%~2!"
 					goto :_continue_curl
 				)
@@ -878,9 +876,7 @@ rem "Section" "Key" "Variable with Value"
 
 rem "Section" "Key" "Variable name (optional)"
 :_db
-	call :_read_ini !PINT_PACKAGES_FILE_USER! %* || (
-		call :_read_ini !PINT_PACKAGES_FILE! %*
-	)
+	call :_read_ini !PINT_PACKAGES_FILE_USER! %* || call :_read_ini !PINT_PACKAGES_FILE! %*
 	exit /b !ERRORLEVEL!
 
 
@@ -922,28 +918,34 @@ rem "INI file path" "Section" "Key" "Variable name (optional)"
 		exit /b 1
 	)
 
-	SET SECTION=
-	SET KEY=
+	set _section=
+	set _key=
 
-	for /f "usebackq tokens=1* delims=^= " %%A in ("%~1") do (
-		if not defined SECTION (
-			if /I "%%A"=="[%~2]" (
-				SET SECTION=1
+	for /f "usebackq tokens=1* delims=^=" %%A in ("%~1") do (
+		for /f "tokens=*" %%M in ("%%A") do set _key=%%M
+
+		if not defined _section (
+			if "!_key:~0,1!"=="[" (
+				for /f "tokens=1 delims=]" %%M in ("!_key!") do (
+					if /I "%%M]"=="[%~2]" set _section=1
+				)
 			)
 		) else (
-			SET "KEY=%%A"
-
-			if "!KEY:~0,1!"=="[" (
+			if "!_key:~0,1!"=="[" (
 				exit /b 1
 			)
 
 			if not "%%B"=="" (
-				if /I "%%A"=="%~3" (
+				for /l %%x in (1,1,10) do if "!_key:~-1!"==" " set _key=!_key:~0,-1!
+
+				if /I "!_key!"=="%~3" (
 					endlocal & (
-						if not "%~4"=="" (
-							SET "%~4=%%B"
-						) else (
-							SET "%%A=%%B"
+						for /f "tokens=*" %%M in ("%%B") do (
+							if not "%~4"=="" (
+								set "%~4=%%M"
+							) else (
+								set "!_key!=%%M"
+							)
 						)
 						exit /b 0
 					)
@@ -955,26 +957,34 @@ rem "INI file path" "Section" "Key" "Variable name (optional)"
 	exit /b 1
 
 
+rem "Variable"
+:_trim
+	"set tempvar=%*"
+	exit /b 0
+
+
 rem "INI file path" "Section" "Key" "@var Value"
 :_write_ini
-	if "%~1"=="" (
-		exit /b 1
-	)
+	if "%~2"=="" exit /b 1
+	if "%~1"=="" exit /b 1
 
 	set _file="%~1"
+
+	for /f "tokens=*" %%M in ("%~2") do set section=%%M
+	for /l %%x in (1,1,10) do if "!section:~-1!"==" " set section=!section:~0,-1!
 
 	if not "%~4"=="" (
 		rem No file
 		if not exist !_file! (
-			>!_file! echo [%~2]
+			>!_file! echo [!section!]
 			>>!_file! echo %~3 = %~4
 			exit /b !ERRORLEVEL!
 		)
 		rem No section
-		>nul !FIND! "[%~2]" < !_file! || (
-			>>!_file! echo [%~2]
+		>nul !FIND! "[!section!]" < !_file! || (
+			>>!_file! echo [!section!]
 			>>!_file! echo %~3 = %~4
-			>nul !FIND! "[%~2]" < !_file!
+			>nul !FIND! "[!section!]" < !_file!
 			exit /b !ERRORLEVEL!
 		)
 	)
@@ -986,11 +996,17 @@ rem "INI file path" "Section" "Key" "@var Value"
 
 	>nul copy /y NUL !PINT_TEMP_FILE!
 
-	for /f "usebackq tokens=1* delims=^= " %%A in ("%~1") do (
-		SET _header=%%A
+	for /f "usebackq tokens=1* delims=^=" %%A in ("%~1") do (
+		for /f "tokens=*" %%M in ("%%A") do set _key=%%M
+		for /l %%x in (1,1,10) do if "!_key:~-1!"==" " set _key=!_key:~0,-1!
+
+		set _value=
+		for /f "tokens=*" %%M in ("%%B") do set _value=%%M
+
+		set _header=!_key!
 
 		if "!_header:~0,1!"=="[" (
-			SET _pending=%%A
+			set "_pending=!_key!"
 		) else (
 			SET _header=
 		)
@@ -998,18 +1014,18 @@ rem "INI file path" "Section" "Key" "@var Value"
 		if not defined _section (
 			if defined _header (
 				if not defined _added (
-					if /I "%%A"=="[%~2]" (
+					if /I "!_key!"=="[!section!]" (
 						SET _section=1
 					)
 				)
 			)
 			if not defined _section (
-				if not "%%B"=="" (
+				if not defined _header (
 					if defined _pending (
 						>>!PINT_TEMP_FILE! echo !_pending!
 						SET _pending=
 					)
-					>>!PINT_TEMP_FILE! echo %%A = %%B
+					>>!PINT_TEMP_FILE! echo !_key! = !_value!
 				)
 			)
 		) else (
@@ -1028,7 +1044,7 @@ rem "INI file path" "Section" "Key" "@var Value"
 				SET _section=
 			) else (
 				if not "%~3"=="" (
-					if /I "%%A"=="%~3" (
+					if /I "!_key!"=="%~3" (
 						if not "%~4"=="" (
 							if defined _pending (
 								>>!PINT_TEMP_FILE! echo !_pending!
@@ -1038,12 +1054,12 @@ rem "INI file path" "Section" "Key" "@var Value"
 							SET _added=1
 						)
 					) else (
-						if not "%%B"=="" (
+						if not defined _header (
 							if defined _pending (
 								>>!PINT_TEMP_FILE! echo !_pending!
 								SET _pending=
 							)
-							>>!PINT_TEMP_FILE! echo %%A = %%B
+							>>!PINT_TEMP_FILE! echo !_key! = !_value!
 						)
 					)
 				)
