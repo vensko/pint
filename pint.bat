@@ -1,6 +1,12 @@
 @if (true == false) @end /*
 <# : Batch + JScript + PowerShell polyglot
 @echo off
+
+if "%~1"=="" (
+	call "%~f0" usage
+	exit /b 0
+)
+
 @setlocal enabledelayedexpansion
 
 rem PINT - Portable INsTaller
@@ -34,20 +40,15 @@ SET MSIEXEC="%WINDIR%\system32\msiexec.exe"
 SET ROBOCOPY="%WINDIR%\system32\robocopy.exe"
 
 rem Functions accessible directly from the command line
-SET BAT_FUNCTIONS=usage self-update update subscribe subscribed install reinstall installed unsubscribe
-SET BAT_FUNCTIONS=!BAT_FUNCTIONS! download remove purge upgrade search outdated add pin unpin _get_url_info
+SET BAT_FUNCTIONS=self-update update subscribe subscribed install reinstall list unsubscribe dir tracked
+SET BAT_FUNCTIONS=!BAT_FUNCTIONS! download remove purge upgrade search outdated pin unpin _get_url_info installto
 SET JS_FUNCTIONS=unzip
-SET PS_FUNCTIONS=shim download-file
+SET PS_FUNCTIONS=usage shim download-file
 
 SET CURL=curl --insecure --ssl-no-revoke --ssl-allow-beast --progress-bar --remote-header-name --location
 SET CURL=!CURL! --create-dirs --fail --max-redirs 5 --retry 2 --retry-delay 1 -X GET
 SET POWERSHELL=powershell -NonInteractive -NoLogo -NoProfile -executionpolicy bypass
 SET JSCRIPT="%WINDIR%\system32\cscript.exe" //nologo //e:jscript !PINT!
-
-if "%~1"=="" (
-	call :usage
-	exit /b 0
-)
 
 rem Create directories if needed
 if not exist "!PINT_APPS_DIR!" (
@@ -116,20 +117,8 @@ rem  FUNCTIONS
 rem *****************************************
 
 
-:usage
-	echo PINT - Portable INsTaller
-	echo.
-	echo Usage:
-	echo pint update^|self-update^|usage^|subscribed^|installed^|search^|outdated^|upgrade
-	echo pint download^|install^|reinstall^|installed^|purge^|pin^|unpin^|
-	echo      search^|outdated^|upgrade^|remove^|purge^|pin^|unpin ^<package(s)^>
-	echo pint add ^<package^> ^<url^>
-	echo pint subscribe^|unsubscribe ^<packages-ini-url^>
-
-	exit /b 0
-
-
 :self-update
+:: Update Pint.
 	echo Fetching !PINT_SELF_URL!
 
 	if exist !PINT_TEMP_FILE! del !PINT_TEMP_FILE!
@@ -148,6 +137,7 @@ rem *****************************************
 
 
 :update
+:: Download package databases and combine them into packages.ini.
 	echo Updating the database...
 	if not exist !PINT_SRC_FILE! (
 		>!PINT_SRC_FILE! echo !PINT_PACKAGES!
@@ -169,13 +159,12 @@ rem *****************************************
 	echo.
 	set /p ="Merged !_count! source"<nul
 	if not !_count!==1 (echo s) else (echo.)
-	echo.
 
 	exit /b 0
 
 
-rem "Term"
-:search
+:search :: [<term>]
+:: Search for an app in the database, or show all items.
 	if not exist !PINT_PACKAGES_FILE! (
 		echo Unable to find a package database, updating...
 		call :update
@@ -191,12 +180,14 @@ rem "Term"
 
 
 :subscribed
+:: Show the list of databases, you are subscribed to.
 	type !PINT_SRC_FILE!
 	exit /b !ERRORLEVEL!
 
 
-rem "INI URL"
-:subscribe
+:subscribe :: <url>
+:: Add a subscription to a package database.
+:: Essentially, it has to be a direct URL of an .ini file.
 	if "%~1"=="" (
 		echo Enter an URL^^!
 		exit /b 1
@@ -219,8 +210,8 @@ rem "INI URL"
 	exit /b 0
 
 
-rem "INI URL"
-:unsubscribe
+:unsubscribe :: <url>
+:: Remove the URL from the list of subscriptions.
 	if "%~1"=="" (
 		echo Enter an URL^^!
 		exit /b 1
@@ -242,349 +233,301 @@ rem "INI URL"
 	exit /b !ERRORLEVEL!
 
 
-:installed
-	if "%~1"=="" (
-		2>nul dir /b /ad "!PINT_APPS_DIR!"
-		exit /b !ERRORLEVEL!
+:list
+:: Show all applications installed via Pint.
+	for /f "usebackq delims=" %%s in (`2^>nul dir /b /s /ah "%PINT_APPS_DIR%\*.pint"`) do (
+		set "_dir=%%s"
+		set "_dir=!_dir:%PINT_APPS_DIR%\=!"
+		set "_dir=!_dir:\%%~nxs=!"
+		echo !_dir!
 	)
-
-	for %%x in (%*) do (
-		call :_is_installed "%%~x"
-		if "!ERRORLEVEL!"=="2" echo %%~x is NOT tracked by Pint.
-		if "!ERRORLEVEL!"=="1" echo %%~x is NOT installed.
-		if "!ERRORLEVEL!"=="0" echo %%~x is installed.
-	)
-
 	exit /b 0
 
 
-:outdated
+rem "@ref File/directory" "@ref Result"
+:_get_app
+	set "_path=%~1"
+	if "!_path!"=="!_path::=!" set "_path=!PINT_APPS_DIR!\%~1"
+
+	if /I not "%~x1"==".pint" (
+		for /f "usebackq delims=" %%x in (`2^>nul dir /b /ah "!_path!\*.pint"`) do (
+			call :_get_app "!_path!\%%x" %2
+			exit /b !ERRORLEVEL!
+		)
+		exit /b 1
+	) else (
+		endlocal
+		set "_i=1"
+		set "%2[dir]=%~dp1"
+		set "%2[dir]=!%2[dir]:~0,-1!"
+		set "%2[relpath]=!%2[dir]:%PINT_APPS_DIR%\=!"
+		for /f "delims=" %%s in ("!%2[dir]!") do set "%2[name]=%%~nxs"
+		for %%x in (%~n1) do (
+			if defined _i (
+				set "%2[id]=%%x"
+				set "_i="
+			) else (
+				if "%%~x"=="64" (
+					set "%2[64]=1"
+				) else (
+					if "%%~x"=="pinned" (
+						set "%2[pinned]=1"
+					) else (
+						set "_token=%%~x"
+						if "!_token:~0,1!"=="v" (
+							set "%2[version]=!_token:~1!"
+						) else (
+							set "%2[size]=%%~x"
+						)
+					)
+				)
+			)
+		)
+	)
+	exit /b 0
+
+
+:outdated :: [<path>]
+:: Check for updates for all or some packages by your choice.
 	if not "%~1"=="" (
 		for %%x in (%*) do (
-			call :_package_outdated "%%~x"
+			if exist "!PINT_APPS_DIR!\%%~x" (
+				call :_package_outdated "%%~x"
+			) else (
+				echo Not found: !PINT_APPS_DIR!\%%~x
+			)
 		)
-		exit /b !ERRORLEVEL!
-	)
-	for /f "usebackq tokens=* delims=" %%x in (`2^>nul dir /b /ad "!PINT_APPS_DIR!"`) do (
-		call :_package_outdated "%%x"
-	)
-	exit /b !ERRORLEVEL!
-
-
-rem "Application ID" "File URL"
-:add
-	if not "%~3"=="" (
-		echo Incorrect parameters.
-		echo Use^: ^<package^> "^<url^>"
-		exit /b 1
-	)
-
-	call :_is_upgradable || (
-		exit /b 1
-	)
-
-	call :_read_ini !PINT_PACKAGES_FILE! %1 dist && (
-		echo %~1 is present in a remote database.
-		SET /P "CONFIRMED=Do you want to add this URL as a permanent source into the user configuration? [Y/N] "
-		if /I not "!CONFIRMED!"=="Y" (
-			exit /b 1
+	) else (
+		for /f "usebackq delims=" %%s in (`2^>nul dir /b /s /ah "%PINT_APPS_DIR%\*.pint"`) do (
+			call :_package_outdated "%%s"
 		)
 	)
-
-	call :_read_ini !PINT_PACKAGES_FILE_USER! %1 dist && (
-		echo %~1 is present in the user database.
-		SET /P "CONFIRMED=Do you want to set this URL as a new permanent source? [Y/N] "
-		if /I not "!CONFIRMED!"=="Y" (
-			exit /b 1
-		)
-	)
-
-	set "_url=%~2"
-
-	if not "!_url!"=="!_url:portableapps.com/apps/=!" (
-		call :_write_ini !PINT_PACKAGES_FILE_USER! %1 dist %2
-		call :_package_force_install %1
-		exit /b !ERRORLEVEL!
-	)
-
-	set "_destdir=!PINT_DIST_DIR!\%~1"
-
-	call :_download _url _destdir || (
-		echo Unable to download %~1 from %~2.
-		exit /b 1
-	)
-
-	call :_install_app %1 "!_destdir!" && (
-		call :_write_ini !PINT_PACKAGES_FILE_USER! %1 dist %2
-	)
-
 	exit /b !ERRORLEVEL!
 
 
-rem "Application ID []"
-:pin
-	for %%x in (%*) do call :_package_pin "%%~x"
-	exit /b !ERRORLEVEL!
-
-rem "Application ID []"
-:unpin
-	for %%x in (%*) do call :_package_unpin "%%~x"
-	exit /b !ERRORLEVEL!
-
-rem "Application ID []"
-:remove
-	for %%x in (%*) do call :_package_remove "%%~x"
-	exit /b !ERRORLEVEL!
-
-rem "Application ID []"
-:download
-	for %%x in (%*) do call :_package_download "%%~x"
-	exit /b !ERRORLEVEL!
-
-rem "Application ID []"
-:install
-	for %%x in (%*) do call :_package_install "%%~x"
-	exit /b !ERRORLEVEL!
-
-rem "Application ID []"
-:reinstall
-	for %%x in (%*) do call :_package_force_install "%%~x"
-	exit /b !ERRORLEVEL!
-
-
-rem "Application ID []"
-:upgrade
-	if not "%~1"=="" (
-		for %%x in (%*) do (
-			call :_package_upgrade "%%~x"
-		)
-		exit /b !ERRORLEVEL!
-	)
-	for /f "usebackq tokens=* delims=" %%x in (`2^>nul dir /b /ad "!PINT_APPS_DIR!"`) do (
-		call :_package_upgrade "%%x"
-	)
-	exit /b !ERRORLEVEL!
-
-
-rem "Application ID []"
-:purge
-	if "%~1"=="" (
-		if exist "!PINT_DIST_DIR!" (
-			rd /S /Q "!PINT_DIST_DIR!"
-		)
-		exit /b 0
-	)
-
-	for %%x in (%*) do (
-		call :_package_purge "%%~x"
-	)
-	exit /b !ERRORLEVEL!
-
-
-rem "Application ID"
-:_package_pin
-	call :_write_log %1 pinned 1 && (
-		echo %~1 is pinned.
-	)
-	exit /b !ERRORLEVEL!
-
-
-rem "Application ID"
-:_package_unpin
-	call :_write_log %1 pinned && (
-		echo %~1 is unpinned.
-	)
-	exit /b !ERRORLEVEL!
-
-
-rem "Application ID"
-:_package_remove
-	call :_is_installed %1 && (
-		echo Uninstalling %~1...
-	)
-	if exist "!PINT_APPS_DIR!\%~1" (
-		call :_shims %1 "!PINT_APPS_DIR!\%~1" delete
-		rd /S /Q "!PINT_APPS_DIR!\%~1"
-	)
-	exit /b 0
-
-
-rem "Application ID"
-:_package_purge
-	echo Removing the %~1 package...
-
-	call :_package_remove %1
-
-	if exist "!PINT_DIST_DIR!\%~1" (
-		rd /S /Q "!PINT_DIST_DIR!\%~1"
-	)
-
-	call :_write_log %1
-
-	exit /b 0
-
-
-rem "Application ID"
+rem "Path"
 :_package_outdated
-	call :_is_installed %1 || (
-		if "!ERRORLEVEL!"=="2" (
-			echo %~1 is not tracked by Pint.
-			exit /b 1
-		) else (
-			echo %~1 is not installed, try to reinstall.
-			exit /b 1
-		)
-	)
+	call :_get_app %1 app || exit /b 1
 
-	>nul call :_get_dist_link %1 dist || (
-		echo Unable to get a link for %1.
-		exit /b 1
-	)
-
-	call :_url_is_updated %1 dist || (
-		exit /b 1
-	)
-
-	echo %~1 is OUTDATED.
-	exit /b 0
-
-
-rem "Application ID"
-:_package_download
-	call :_get_dist_link %1 _dist || (
-		echo Unable to get a link for %1.
-		exit /b 1
-	)
-
-	set "_destdir=!PINT_DIST_DIR!\%~1"
-
-	call :_download _dist _destdir || (
-		echo Unable to download an update for %1.
-		exit /b 1
-	)
-
-	exit /b 0
-
-
-rem "Application ID"
-:_package_force_install
-	call :_is_upgradable || (
-		exit /b 1
-	)
-
-	call :_db %1 deps && (
-		for %%x in (!deps!) do (
-			call :_package_install "%%~x"
-		)
-	)
-
-	call :_get_dist_link %1 _url || (
-		echo Unable to get a link for %1.
-		exit /b 1
-	)
-
-	set "_destdir=!PINT_DIST_DIR!\%~1"
-
-	call :_download _url _destdir || (
-		echo Unable to download %1.
-		exit /b 1
-	)
-
-	call :_install_app %1 "!_destdir!"
-	exit /b !ERRORLEVEL!
-
-
-rem "Application ID"
-:_package_install
-	call :_is_installed %1 && (
-		echo %~1 is already installed.
+	if "!app[size]!"=="" (
+		echo %~1 is not tracked by Pint, try to reinstall.
 		exit /b 0
 	)
 
-	if errorlevel 2 (
-		echo %~1 is not tracked by Pint.
+	call :_get_dist_info "!app[id]!" url || (
+		echo Unable to get a link for %~1.
 		exit /b 1
 	)
 
-	call :_package_force_install %1
+	call :_url_is_updated app url
 	exit /b !ERRORLEVEL!
 
 
-rem "Application ID"
+:upgrade :: [<path>]
+:: Install updates for all or selected apps.
+	if not "%~1"=="" (
+		for %%x in (%*) do call :_package_upgrade "%%~x"
+	) else (
+		for /f "usebackq delims=" %%x in (`%PINT% list`) do call :_package_upgrade "%%x"
+	)
+	exit /b !ERRORLEVEL!
+
+
+rem "Path"
 :_package_upgrade
-	call :_is_installed %1 || (
-		if errorlevel 2 (
-			echo %~1 is not tracked by Pint.
-			exit /b 1
-		) else (
-			call :_package_install %1
+	call :_is_dir_non_empty %1 || (
+		call :install %1
+		exit /b !ERRORLEVEL!
+	)
+	call :_is_dir_tracked %1 || exit /b 1
+	call :_is_dir_upgradable %1 || exit /b 1
+
+	call :_get_app %1 app
+
+	if "!app[size]!"=="" (
+		echo %~1 is not tracked by Pint, try to reinstall.
+		exit /b 0
+	)
+
+	call :_get_dist_info "!app[id]!" url || (
+		echo Unable to get a link for %~1.
+		exit /b 1
+	)
+
+	call :_url_is_updated app url && (
+		call :_get_dist_file "!app[id]!" url _destfile
+		call :_download url[url] _destfile && (
+			call :_force_install "!app[id]!" "!PINT_APPS_DIR!\%~1"
 			exit /b !ERRORLEVEL!
 		)
 	)
+	exit /b 1
 
-	call :_is_upgradable %1 || (
-		exit /b 1
+
+:pin :: <path>
+:: Suppress updates for selected apps.
+	if not "%~2"=="" (
+		for %%x in (%*) do call :pin "%%~x"
+		exit /b 0
+	)
+	call :_is_dir_tracked %1 || exit /b 1
+	call :_get_app %1 app
+	if defined _unpin (
+		set "app[pinned]="
+		echo %~1 is unpinned.
+	) else (
+		set "app[pinned]=1"
+		echo %~1 is pinned.
+	)
+	call :_save_app_data app
+	exit /b !ERRORLEVEL!
+
+
+:unpin :: <path>
+:: Allow updates for selected apps.
+	set "_unpin=1"
+	call :pin %*
+	exit /b 0
+
+
+:remove :: <path>
+:: Delete selected apps (this is equivalent to manual deletion).
+	if not "%~2"=="" (
+		for %%x in (%*) do call :remove "%%~x"
+		exit /b 0
+	)
+	if exist "!PINT_APPS_DIR!\%~1" (
+		echo Uninstalling %~1...
+		2>nul rd /S /Q "!PINT_APPS_DIR!\%~1"
+		call :_shims %1 "!PINT_APPS_DIR!\%~1" delete
+	) else (
+		echo %~1 is not installed
+	)
+	exit /b !ERRORLEVEL!
+
+
+:purge :: <path>
+:: Delete selected apps AND their installers.
+	if not "%~2"=="" (
+		for %%x in (%*) do call :purge "%%~x"
+		exit /b 0
+	)
+	call :remove %1
+	2>nul del /Q /S "!PINT_DIST_DIR!\%~1--*.*"
+	exit /b !ERRORLEVEL!
+
+
+:forget :: <path>
+:: Stop tracking of selected apps.
+	if not "%~2"=="" (
+		for %%x in (%*) do call :forget "%%~x"
+		exit /b 0
+	)
+	2>nul del /Q /S /AH "!PINT_APPS_DIR!\%~1\*.pint"
+	echo %~1 is no longer managed by Pint.
+	exit /b
+
+
+:download :: <app>
+:: Only download selected installers without unpacking them.
+	if not "%~2"=="" (
+		for %%x in (%*) do call :download "%%~x"
+		exit /b 0
 	)
 
-	call :_db %1 deps && (
-		for %%x in (!deps!) do (
-			call :_package_upgrade "%%~x"
-		)
-	)
-
-	call :_get_dist_link %1 _url || (
+	call :_get_dist_info %1 url || (
 		echo Unable to get a link for %1.
 		exit /b 1
 	)
 
-	call :_url_is_updated %1 _url
-	if !ERRORLEVEL!==1 (
-		exit /b 0
+	call :_get_dist_file %1 url _destfile
+	for %%x in ("!_destfile!") do set "size=%%~zx"
+
+	if not "!size!"=="" (
+		if not "!url[size]!"=="" (
+			if "!size!"=="!url[size]!" (
+				echo Remote file size is equal to the local, skipping redownloading.
+				exit /b 0
+			)
+		)
 	)
 
-	set "_destdir=!PINT_DIST_DIR!\%~1"
+	2>nul del /Q /S "!PINT_DIST_DIR!\%~1--*.*"
 
-	call :_download _url _destdir || (
-		echo Unable to download an update for %1.
+	call :_download url _destfile || (
+		echo Unable to download a package with %1.
 		exit /b 1
 	)
 
-	call :_install_app %1 "!_destdir!"
 	exit /b !ERRORLEVEL!
 
 
-rem "Application ID"
-:_is_upgradable
-	call :_read_log %1 pinned && (
-		echo Updates for are suppressed. To allow this install, use pint unpin %~1
-		exit /b 1
-	)
+rem "Application ID" "@ref URL" "@ref Result"
+:_get_dist_file
+	endlocal
+	set "%~3=!PINT_DIST_DIR!\%~1--!%~2[name]!"
 	exit /b 0
 
 
-rem "Application ID" "DIST Variable name"
-:_get_dist_link
+:installto :: <app> <path>
+:: Install the app to the given path.
+	call :_is_dir_non_empty %2 && (
+		call :_is_dir_tracked %2
+		if errorlevel 1 (
+			echo %PINT_APPS_DIR%\%~2 is not empty.
+			set /p _confirm=Do you want to REPLACE its contents? [Y/N] 
+			if /I not "!_confirm!"=="Y" exit /b 1
+		) else (
+			echo %PINT_APPS_DIR%\%~2 is not empty.
+			echo Use `reinstall` to force this action.
+			exit /b 1
+		)
+	)
+	call :_force_install %1 %2
+	exit /b !ERRORLEVEL!
+
+
+rem "Application ID []"
+:install :: <app>
+:: Install one or more apps to directories with the same names.
+	if not "%~2"=="" (
+		for %%x in (%*) do call :install "%%~x"
+		exit /b 0
+	)
+	call :installto %1 %1
+	exit /b !ERRORLEVEL!
+
+
+rem "Application ID" "Destination directory"
+:_force_install
+	call :download %1
+	call :_install_app_to %1 "!PINT_APPS_DIR!\%~2"
+	exit /b !ERRORLEVEL!
+
+
+:reinstall :: <path>
+:: Force reinstallation of the package.
+	if not "%~2"=="" (
+		for %%x in (%*) do call :reinstall "%%~x"
+		exit /b 0
+	)
+	call :_is_dir_upgradable %1 || exit /b 1
+	call :_get_app %1 app || set "app[id]=%~1"
+	call :download "!app[id]!"
+	call :_install_app_to "!app[id]!" "!PINT_APPS_DIR!\%~1"
+	exit /b !ERRORLEVEL!
+
+
+:_get_dist_info :: <app-id> <@ref result>
 	endlocal & SET "%~2="
 
-	if "%PROCESSOR_ARCHITECTURE%"=="x86" (
-		call :_db %1 dist
-		call :_db %1 follow
-		call :_db %1 link
-	) else (
-		call :_db %1 dist64 dist || call :_db %1 dist
-		call :_db %1 follow64 follow || call :_db %1 follow
-		call :_db %1 link64 link || call :_db %1 link
-	)
+	call :_db %1 dist follow link
 
-	if not defined dist (
-		exit /b 1
-	)
+	if not defined dist exit /b 1
 
 	if not defined link (
-		if not defined link64 (
-			if not "!dist!"=="!dist:portableapps.com/apps/=!" (
-				set "link=//a[contains(@href, '.paf.exe')]"
-			)
+		if not "!dist!"=="!dist:portableapps.com/apps/=!" (
+			set "link=//a[contains(@href, '.paf.exe')]"
 		)
 	)
 
@@ -616,26 +559,18 @@ rem "Application ID" "DIST Variable name"
 		)
 	)
 
-	if not defined dist (
-		exit /b 1
-	)
+	if not defined dist exit /b 1
 
 	if not "!dist!"=="!dist:fosshub.com/=!" (
 		set dist=!dist:fosshub.com/=fosshub.com/genLink/!
 		set dist=!dist:.html/=/!
-		for /f "usebackq tokens=* delims=" %%i in (`!CURL! -s !referer! "!dist!"`) do (
-			endlocal & (
-				SET "%~2=%%i"
-				exit /b 0
-			)
+		for /f "usebackq tokens=* delims=" %%i in (`%CURL% -s !referer! "!dist!"`) do (
+			set "dist=%%i"
 		)
-		exit /b 1
 	)
 
-	endlocal & (
-		SET "%~2=!dist!"
-		exit /b 0
-	)
+	call :_get_url_info dist %~2
+	exit /b !ERRORLEVEL!
 
 
 rem "@ref URL" "@ref Result (without quotes!)"
@@ -707,70 +642,66 @@ rem		echo "!%2[code]!"
 	exit /b 0
 
 
-rem "Application ID" "@ref URL"
+rem "@ref App" "@ref Info"
 :_url_is_updated
-	call :_read_log %1 size || (
+	if "!%1[size]!"=="" (
 		echo %~1 is not tracked by Pint, try to reinstall.
 		exit /b 3
 	)
 
-	call :_get_url_info %2 _res || (
+	if "%2[size]"=="" (
 		echo Unable to check updates for %~1.
 		exit /b 2
 	)
 
-	if /I "!_res[type]:~0,5!"=="text/" (
-		echo The %~1 server responded with a html page.
+	if /I "!%2[type]:~0,5!"=="text/" (
+		echo The !%~1[id]! ^(!%~1[relpath]!^) server responded with a html page.
 		exit /b 2
 	) else (
-		if "!_res[size]!"=="!size!" (
-			echo %~1 is up to date.
+		if "!%2[size]!"=="!%1[size]!" (
+			echo !%~1[relpath]! is up to date.
 			exit /b 1
 		) else (
+			echo !%~1[relpath]! is OUTDATED.
 			exit /b 0
 		)
 	)
 
 
-rem "Application ID" "Source directory"
-:_install_app
-	set "_archive="
-	for /f "usebackq tokens=* delims=" %%i in (`2^>nul dir /b /s /a-d %2`) do set "_archive=%%i"
-	if not defined _archive exit /b 1
-	call :install_file %1 _archive "!PINT_APPS_DIR!\%~1"
-	exit /b !ERRORLEVEL!
-
-
 rem "@ref File path" "@ref Destination directory"
-:_unpack
-	for /f "tokens=* delims=" %%i in ("!%~1!") do (
+:_unpack_file_to
+	for %%i in ("%~1") do (
 		echo Unpacking %%~nxi
 
 		if not exist "!%~2!" md "!%~2!"
 
 		if /I "%%~xi"==".msi" (
-			>nul !MSIEXEC! /a "%%i" /norestart /qn TARGETDIR="!%~2!"
+			>nul !MSIEXEC! /a "%%~i" /norestart /qn TARGETDIR="!%~2!"
 		) else (
 			call :_where 7z
 			if errorlevel 1 (
 				if /I "%%~xi"==".zip" (
-					!JSCRIPT! unzip "%%i" "!%~2!"
+					!JSCRIPT! unzip "%%~i" "!%~2!"
 				) else (
 					exit /b 1
 				)
 			) else (
-				>nul "%ComSpec%" /d /c 7z x -y -aoa -o"!%~2!" "%%i"
+				>nul "%ComSpec%" /d /c 7z x -y -aoa -o"!%~2!" "%%~i"
 			)
 		)
+		if errorlevel 1 (
+			echo Unpacking failed.
+			exit /b 1
+		)
+		exit /b 0
 	)
-	exit /b !ERRORLEVEL!
 
 
 rem "Directory" "Search string" "@ref Result path"
 :_get_root
 	endlocal & set "%~3="
 	cd /D %1 || exit /b 1
-	for /f "usebackq tokens=* delims=" %%i in (`dir /b /s`) do (
+	for /f "usebackq delims=" %%i in (`2^>nul dir /b /s`) do (
 		set "_file=%%i"
 		if not "!_file!"=="!_file:%~2=!" (
 			endlocal & set "%~3=%%i"
@@ -780,33 +711,23 @@ rem "Directory" "Search string" "@ref Result path"
 	exit /b 1
 
 
-rem "Application ID" "@ref File path" "Destination directory"
-:install_file
-	echo Installing %~1 to %~3
+rem "Application ID" "Destination directory"
+:_install_app_to
+	cd /D "%PINT_DIST_DIR%"
+	for %%f in (%~1--*.*) do set "_archive=%PINT_DIST_DIR%\%%f"
 
-	set "type="
-	if /I "!%~2:~-4!"==".exe" call :_db %1 type
+	echo Installing %~1 to %~2
+	call :_db %1 type base xf xd
 
 	if /I "!type!"=="standalone" (
-		if not exist %3 md %3
-		call :_filename "!%~2!" _filename
-		>nul copy /Y "!%~2!" /B "%~3\!_filename!"
+		if not exist %2 md %2
+		for %%f in ("!_archive!") do >nul copy /Y "!_archive!" /B "%~2\%~1%%~xf"
 	) else (
 		set "_tempdir=%TEMP%\pint\%~1%RANDOM%"
 		if not exist "!_tempdir!" md "!_tempdir!"
 		cd /D "!_tempdir!" || exit /b !ERRORLEVEL!
 
-		call :_unpack %2 _tempdir || exit /b !ERRORLEVEL!
-
-		if "%PROCESSOR_ARCHITECTURE%"=="x86" (
-			call :_db %1 base
-			call :_db %1 xf
-			call :_db %1 xd
-		) else (
-			call :_db %1 base64 base || call :_db %1 base
-			call :_db %1 xf64 xf || call :_db %1 xf
-			call :_db %1 xd64 xd || call :_db %1 xd
-		)
+		call :_unpack_file_to "!_archive!" _tempdir || exit /b !ERRORLEVEL!
 
 		if defined base (
 			call :_get_root "!_tempdir!" "!base!" _base_dir && (
@@ -814,78 +735,91 @@ rem "Application ID" "@ref File path" "Destination directory"
 			)
 		)
 
-		set "xf=/XF !xf! $R0"
+		set "xf=/XF !xf! *.pint $R0"
 		set "xd=/XD !xd! $PLUGINSDIR $TEMP"
-		>nul !ROBOCOPY! "!cd!" %3 /E /PURGE /NJS /NJH /NFL /NDL /ETA !xf! !xd!
-		cd /D %3
+		>nul !ROBOCOPY! "!cd!" %2 /E /PURGE /NJS /NJH /NFL /NDL /ETA !xf! !xd!
+		cd /D %2
 		rd /Q /S "%TEMP%\pint"
 	)
 
-	for /f "tokens=* delims=" %%i in ("!%~2!") do (
-		call :_write_log %1 size "%%~zi"
-		call :_write_log %1 filemtime "%%~ti"
-	)
+	call :_get_app %2 app
+	set "app[id]=%~1"
+	set "app[dir]=%~2"
+	call :_app_get_version %2 app[version]
+	for %%f in ("!_archive!") do set "app[size]=%%~zf"
+	call :_save_app_data app
 
-	call :_app_get_version %3 _v && (
-		echo Detected version !_v!
-		call :_write_log %1 version "!_v!"
-	)
-
-	call :_shims %1 %3
+	call :_shims %1 %2
 
 	exit /b !ERRORLEVEL!
 
 
-rem "Application ID"
-:_is_installed
-	>nul 2>nul !FINDSTR! /I /L /C:"[%~1]" !PINT_PACKAGES_FILE_USER! || (
-		>nul 2>nul !FINDSTR! /I /L /C:"[%~1]" !PINT_PACKAGES_FILE! || exit /b 2
-	)
-	2>nul dir /b "!PINT_APPS_DIR!\%~1\*.*" | >nul 2>nul !FIND! /v "" && exit /b 0
+rem "@ref App"
+:_save_app_data
+	if "!%~1[id]!"=="" echo Invalid application.&& exit /b 1
+	if "!%~1[dir]!"=="" echo Invalid application !%~1[dir]!.&& exit /b 1
+
+	set "_name=!%~1[id]!"
+	if not "!%~1[version]!"=="" set "_name=!_name! v!%~1[version]!"
+	if not "!%~1[64]!"=="" set "_name=!_name! 64"
+	if not "!%~1[pinned]!"=="" set "_name=!_name! pinned"
+	if not "!%~1[size]!"=="" set "_name=!_name! !%~1[size]!"
+	>nul 2>nul del /S /Q /AH "!%~1[dir]!\*.pint"
+	if "!_name!"=="" exit /b 1
+	>nul copy /y NUL "!%~1[dir]!\!_name!.pint"
+	attrib +H "!%~1[dir]!\!_name!.pint"
+	exit /b 0
+
+
+rem "Path"
+:_is_dir_non_empty
+	if exist "!PINT_APPS_DIR!\%~1\*" exit /b 0
 	exit /b 1
+
+
+rem "Path"
+:_is_dir_upgradable
+	if exist "!PINT_APPS_DIR!\%~1\* pinned*.pint" (
+		echo %~1 updates are suppressed. To allow this action, use `pint unpin %~1`.
+		exit /b 1
+	)
+	exit /b 0
+
+
+rem "Path"
+:_is_dir_tracked
+	if not exist "!PINT_APPS_DIR!\%~1\*.pint" (
+		echo %~1 is not tracked by Pint, try to reinstall it.
+		exit /b 1
+	)
+	exit /b 0
 
 
 rem "Application ID" "Directory" "delete"
 :_shims
-	call :_db %1 shim
-	call :_db %1 noshim
+	call :_db %1 shim noshim
 	call !PINT! shim %2 "!shim!" "!noshim!" %3
 	exit /b 0
 
 
-rem "@ref Download URL" "@ref Destination directory" "Download URL"
+rem "@ref URL" "@ref Destination file"
 :_download
-	echo Downloading !%~1!
-
-	SET "DEST_FILE="
-	
-	if not exist "!%~2!" md "!%~2!"
-	if not "%~x3"=="" SET "DEST_FILE=%~nx3"
-
-	call :_where curl || (
-		if not defined DEST_FILE set "DEST_FILE=download.zip"
-		call !PINT! download-file "%~1" "!%~2!\!DEST_FILE!" && exit /b 0
-		echo Download FAILED.
-		exit /b 1
-	)
-
-	if defined DEST_FILE (
-		"%ComSpec%" /d /c !CURL! -o "!%~2!\!DEST_FILE!" "!%~1!" || (
-			echo FAILED
-			exit /b 1
-		)
+	echo Downloading !%~1[url]!
+	if not exist "!%~dp2!" md "!%~dp2!"
+	call :_where curl
+	if errorlevel 1 (
+		echo "!%~1[url]!" "!%~2!"
+		call %PINT% download-file "%~1[url]" "!%~2!"
 	) else (
-		pushd "!%~2!"
-		echo !CURL! -O -J "!%~1!"
-		"%ComSpec%" /d /c !CURL! -O -J "!%~1!" || (
-			echo FAILED
-			popd
-			exit /b 1
-		)
-		popd
+		"%ComSpec%" /d /c %CURL% -o "!%~2!" "!%~1[url]!"
 	)
-
-	exit /b 0
+	if errorlevel 1 (
+		echo Download FAILED^^!
+		exit /b 1
+	) else (
+		echo Saved to !%~2!
+		exit /b 0
+	)
 
 
 rem "Path" "@ref Filename"
@@ -894,22 +828,25 @@ rem "Path" "@ref Filename"
 	exit /b 0
 
 
-rem "Section" "Key" "Variable name (optional)"
-:_read_log
-	call :_read_ini !PINT_HISTORY_FILE! %*
-	exit /b !ERRORLEVEL!
-
-
-rem "Section" "Key" "Variable with Value"
-:_write_log
-	call :_write_ini !PINT_HISTORY_FILE! %*
-	exit /b !ERRORLEVEL!
-
-
-rem "Section" "Key" "Variable name (optional)"
+rem "Application ID" "@ref Keys[]"
 :_db
-	call :_read_ini !PINT_PACKAGES_FILE_USER! %* || call :_read_ini !PINT_PACKAGES_FILE! %*
-	exit /b !ERRORLEVEL!
+	if "!ini[%~1]!"=="" (
+		call :_read_ini !PINT_PACKAGES_FILE! "%~1" ini
+		if exist !PINT_PACKAGES_FILE_USER! call :_read_ini !PINT_PACKAGES_FILE_USER! "%~1" ini
+	)
+	set _i=1
+	for %%x in (%*) do (
+		if not defined _i (
+			endlocal & (
+				set "%%x=!ini[%~1][%%x]!"
+				if not "%PROCESSOR_ARCHITECTURE%"=="x86" (
+					if not "!ini[%~1][%%x64]!"=="" set "%%x=!ini[%~1][%%x64]!"
+				)
+			)
+		)
+		set _i=
+	)
+	exit /b 0
 
 
 rem "Directory" "@ref result"
@@ -932,18 +869,10 @@ rem "Directory" "@ref result"
 	exit /b 1
 
 
-
-rem "INI file path" "Section" "Key" "Variable name (optional)"
+rem "INI file path" "Section" "@ref Result"
 :_read_ini
-	endlocal & (
-		if not "%~3"=="" (
-			SET "%~3="
-		)
-		if not "%~4"=="" (
-			SET "%~4="
-		)
-	)
-	if "%~3"=="" (
+	if "%~2"=="" (
+		echo Incorrect arguments in _read_ini: %*
 		exit /b 1
 	)
 
@@ -960,29 +889,20 @@ rem "INI file path" "Section" "Key" "Variable name (optional)"
 				)
 			)
 		) else (
-			if "!_key:~0,1!"=="[" (
-				exit /b 1
-			)
+			rem Reached next section
+			if "!_key:~0,1!"=="[" exit /b 0
 
 			if not "%%B"=="" (
 				for /l %%x in (1,1,10) do if "!_key:~-1!"==" " set _key=!_key:~0,-1!
-
-				if /I "!_key!"=="%~3" (
-					endlocal & (
-						for /f "tokens=*" %%M in ("%%B") do (
-							if not "%~4"=="" (
-								set "%~4=%%M"
-							) else (
-								set "!_key!=%%M"
-							)
-						)
-						exit /b 0
-					)
+				endlocal & (
+					set "%~3[%~2]=1"
+					for /f "tokens=*" %%V in ("%%B") do set "%~3[%~2][!_key!]=%%V"
 				)
 			)
 		)
 	)
 
+	if not "!%~3[%~2]!"=="" exit /b 0
 	exit /b 1
 
 
@@ -995,6 +915,8 @@ rem "INI file path" "Section" "Key" "@ref Value"
 
 	for /f "tokens=*" %%M in ("%~2") do set section=%%M
 	for /l %%x in (1,1,10) do if "!section:~-1!"==" " set section=!section:~0,-1!
+
+	set "ini[!section!][%~3]=%~4"
 
 	if not "%~4"=="" (
 		rem No file
@@ -1110,15 +1032,8 @@ rem Installs missing executables
 rem "Executable path" "Application ID"
 :_has
 	call :_where %1 && exit /b 0
-
 	echo Pint depends on %1, trying to install it automatically. Please wait...
-
-	if not "%~2"=="" (
-		call :_package_force_install %2
-	) else (
-		call :_package_force_install %1
-	)
-
+	if not "%~2"=="" ( call :reinstall %2 ) else ( call :reinstall %1 )
 	call :_where %1
 	exit /b !ERRORLEVEL!
 
@@ -1126,6 +1041,7 @@ rem "Executable path" "Application ID"
 :_where
 	if exist "!PINT_APPS_DIR!\%~1.bat" exit /b 0
 	exit /b 1
+
 
 goto :eof
 
@@ -1156,6 +1072,32 @@ WScript.quit(0);
 /* end JScript / begin PowerShell #>
 
 switch ($env:_COMMAND) {
+	usage {
+		write-host "PINT - Portable INsTaller" -foreground "white"
+		""
+		"Usage:"
+		write-host "pint `<command`> `<parameters`>" -foreground "yellow"
+		""
+		"Available commands:"
+		foreach ($line in (Get-Content $env:PINT.Replace("`"",""))) {
+			if ($line.StartsWith("::")) {
+				if ($command -eq 1) {
+					write-host $line.replace(":: ", "")
+					$command = 0
+				} else {
+					write-host "".padright(19, " ") -nonewline
+					write-host $line.replace(":: ", "")
+				}
+			} elseif ($line.StartsWith(":") -and -not $line.StartsWith(":_")) {
+				write-host $line.substring(1).replace(":: ", "").padright(18, " ") -foreground "green" -nonewline
+				write-host " " -nonewline
+				$command = 1
+			}
+		}
+		""
+		"`<app`> refers to an ID from the database, which can be seen via the search command."
+		"`<path`> refers to a relative path to an app in the 'apps' directory as shown by the list command."
+	}
 	download-file {
 		try {
 			(new-object System.Net.WebClient).DownloadFile([Environment]::GetEnvironmentVariable($env:_PARAM_1), $env:_PARAM_2)
