@@ -28,5 +28,5 @@ install <app>      Install one or more apps to directories with the same names.
 reinstall <path>   Force reinstallation of the package.
 ```
 
-<app> refers to an ID from the database, which can be seen via the search command.
-<path> refers to a relative path to an app in the 'apps' directory as shown by the list command.
+&lt;app&gt; refers to an ID from the database, which can be seen via the search command.
+&lt;path&gt; refers to a relative path to an app in the 'apps' directory as shown by the list command.
