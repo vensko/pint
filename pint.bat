@@ -1,23 +1,22 @@
 <# : Batch/PowerShell hybrid
 @echo off
-if "%~1"=="" call "%~f0" usage && exit /b 0
+if "%*"=="" call "%~f0" usage && exit /b 0
 @setlocal enabledelayedexpansion
 
 rem PINT - Portable INsTaller
 rem https://github.com/vensko/pint
 
 SET PINT="%~f0"
+SET PINT_VERSION=1.0
 
 rem Set variables if they weren't overriden earlier
-if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0packages"
+if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0dist"
 if not defined PINT_APPS_DIR set "PINT_APPS_DIR=%~dp0apps"
 if not defined PINT_PACKAGES_FILE set PINT_PACKAGES_FILE="%~dp0packages.ini"
 if not defined PINT_PACKAGES_FILE_USER set PINT_PACKAGES_FILE_USER="%~dp0packages.user.ini"
 if not defined PINT_SRC_FILE set PINT_SRC_FILE="%~dp0sources.list"
 if not defined PINT_TEMP_FILE set PINT_TEMP_FILE="%TEMP%\pint.tmp"
-if not defined PINT_USER_AGENT (
-	set "PINT_USER_AGENT=User-Agent: Mozilla/5.0 ^(Windows NT 6.1; rv:40.0^) Gecko/20100101 Firefox/40.1"
-)
+if not defined PINT_USER_AGENT set "PINT_USER_AGENT=PintBot/%PINT_VERSION% (+https://github.com/vensko/pint)"
 
 rem PowerShell
 for %%x in (usage shim download-file unzip) do (
@@ -45,21 +44,16 @@ SET FORFILES="%WINDIR%\system32\forfiles.exe"
 SET MSIEXEC="%WINDIR%\system32\msiexec.exe"
 SET ROBOCOPY="%WINDIR%\system32\robocopy.exe"
 
-SET CURL=curl --insecure --ssl-no-revoke --ssl-allow-beast --progress-bar --remote-header-name --location
-SET CURL=%CURL% --create-dirs --fail --max-redirs 5 --retry 2 --retry-delay 1 -X GET
+SET CURL="%PINT_APPS_DIR%\curl.bat" -X GET -k -# -J -L -f -A "%PINT_USER_AGENT%" --create-dirs
+SET CURL=%CURL% --ssl-no-revoke --ssl-allow-beast --create-dirs --max-redirs 5 --retry 2 --retry-delay 1
 
-rem Create directories if needed
-if not exist "%PINT_APPS_DIR%" md "%PINT_APPS_DIR%"
-
-call :_has xidel || ( echo Unable to install Xidel.&&	exit /b 1 )
-call :_has 7z 7-zip || ( echo Unable to install 7-zip.&& exit /b 1 )
-call :_has curl || ( echo Unable to install curl.&& exit /b 1 )
+call :_setup || exit /b 1
 
 rem Functions accessible directly from the command line
-SET BAT_FUNCTIONS=self-update update subscribe subscribed install reinstall list unsubscribe dir tracked
-SET BAT_FUNCTIONS=%BAT_FUNCTIONS% download remove purge upgrade search outdated pin unpin installto
+SET FUNC=self-update update subscribe subscribed install reinstall list unsubscribe dir tracked
+SET FUNC=%FUNC% download remove purge upgrade search outdated pin unpin installto
 
-for %%x in (%BAT_FUNCTIONS%) do (
+for %%x in (%FUNC%) do (
 	if "%~1"=="%%x" (
 		call :%*
 		exit /b !ERRORLEVEL!
@@ -79,9 +73,9 @@ rem *****************************************
 :: Update Pint.
 	echo Fetching %PINT_SELF_URL%
 
-	if exist %PINT_TEMP_FILE% del %PINT_TEMP_FILE%
+	if exist !PINT_TEMP_FILE! del !PINT_TEMP_FILE!
 
-	"%ComSpec%" /d /c %CURL% -s -S -o %PINT_TEMP_FILE% "%PINT_SELF_URL%" && (
+	call :_download PINT_SELF_URL PINT_TEMP_FILE && (
 		>nul %FINDSTR% /L /C:"PINT - Portable INsTaller" %PINT_TEMP_FILE% && (
 			>nul move /Y %PINT_TEMP_FILE% %PINT% && (
 				echo Pint was updated to the latest version.
@@ -103,13 +97,21 @@ rem *****************************************
 	>nul copy /y NUL %PINT_PACKAGES_FILE%
 
 	for /f "usebackq" %%f in ("%PINT_SRC_FILE:~1,-1%") do (
-		>>%PINT_PACKAGES_FILE% "%ComSpec%" /d /c %CURL% --compressed -s -S "%%f"
+		set "_url=%%f"
+		call :_download _url PINT_TEMP_FILE
+		>>%PINT_PACKAGES_FILE% type %PINT_TEMP_FILE%
 		if not errorlevel 1 (echo Fetched %%f) else (echo Failed to fetch %%f)
 	)
 
 	echo Done.
 
-	for %%f in (%PINT_PACKAGES_FILE%) do if "%%~zf"=="0" exit /b 1
+	for %%f in (%PINT_PACKAGES_FILE%) do (
+		if "%%~zf"=="0" (
+			2>nul del /Q %PINT_PACKAGES_FILE%
+			exit /b 1
+		)
+	)
+
 	exit /b 0
 
 
@@ -124,14 +126,6 @@ rem *****************************************
 	%FINDSTR% /I /B /R "\s*\[.*%~1.*\]" %PINT_PACKAGES_FILE% | %SORT%
 
 	exit /b !ERRORLEVEL!
-
-
-:_db_exists
-	if not exist %PINT_PACKAGES_FILE% (
-		echo Unable to find a package database, updating...
-		call :update || ( echo Update failed. && exit /b 1 )
-	)
-	exit /b 0
 
 
 :subscribed
@@ -212,6 +206,7 @@ rem "@ref File/directory" "@ref Result"
 		exit /b 1
 	) else (
 		endlocal
+		for %%i in (id dir relpath 64 pinned version size) do set "%2[%%i]="
 		set "_i=1"
 		set "%2[dir]=%~dp1"
 		set "%2[dir]=!%2[dir]:~0,-1!"
@@ -244,25 +239,22 @@ rem "@ref File/directory" "@ref Result"
 
 :outdated :: [<path>]
 :: Check for updates for all or some packages by your choice.
-	if not "%~1"=="" (
-		for %%x in (%*) do (
-			if exist "%PINT_APPS_DIR%\%%~x" (
-				call :_package_outdated "%%~x"
-			) else (
-				echo Not found: %PINT_APPS_DIR%\%%~x
-			)
-		)
-	) else (
+	if "%*"=="" (
 		for /f "usebackq delims=" %%s in (`2^>nul dir /b /s /ah "%PINT_APPS_DIR%\*.pint"`) do (
 			call :_package_outdated "%%s"
 		)
+	) else (
+		for %%x in (%*) do call :_package_outdated "%%~x"
 	)
 	exit /b !ERRORLEVEL!
 
 
 rem "Path"
 :_package_outdated
-	call :_get_app %1 app || exit /b 1
+	call :_get_app %1 app || (
+		echo Unable to find a *.pint file in %PINT_APPS_DIR%\%~1
+		exit /b 1
+	)
 
 	if "!app[size]!"=="" (
 		echo %~1 is not tracked by Pint, try to reinstall.
@@ -280,7 +272,7 @@ rem "Path"
 
 :upgrade :: [<path>]
 :: Install updates for all or selected apps.
-	if not "%~1"=="" (
+	if not "%*"=="" (
 		for %%x in (%*) do call :_package_upgrade "%%~x"
 	) else (
 		for /f "usebackq delims=" %%x in (`%PINT% list`) do call :_package_upgrade "%%x"
@@ -409,7 +401,7 @@ rem "Path"
 
 	2>nul del /Q /S "%PINT_DIST_DIR%\%~1--*.*"
 
-	call :_download url _destfile || (
+	call :_download url[url] _destfile || (
 		echo Unable to download a package with %1.
 		exit /b 1
 	)
@@ -468,7 +460,7 @@ rem "Application ID" "Destination directory"
 	)
 	call :_is_dir_upgradable %1 || exit /b 1
 	call :_get_app %1 app || set "app[id]=%~1"
-	call :download "!app[id]!"
+	call :download "!app[id]!" || exit /b 1
 	call :_install_app_to "!app[id]!" "%PINT_APPS_DIR%\%~1"
 	exit /b !ERRORLEVEL!
 
@@ -490,6 +482,11 @@ rem "Application ID" "Destination directory"
 
 	if defined link (
 
+		call :_where xidel || (
+			echo Unable to find Xidel.
+			exit /b 1
+		)
+
 		if defined follow (
 			SET follow=!follow:^"=\"!
 			SET follow=--follow "!follow: | =" --follow "!"
@@ -503,14 +500,13 @@ rem "Application ID" "Destination directory"
 		SET _parsed=
 
 		echo Extracting a download link from !dist!
-		for /f "usebackq tokens=* delims=" %%i in (`2^>nul xidel "!dist!" !follow! --quiet --extract "(!link:%%=%%%%!)[1]" --header="Referer^: !dist!" --user-agent="!PINT_USER_AGENT!"`) do (
+
+		for /f "usebackq tokens=* delims=" %%i in (`2^>nul "%%PINT_APPS_DIR%%\xidel.bat" "!dist!" !follow! --quiet --extract "(!link:%%=%%%%!)[1]" --header="Referer^: !dist!" --user-agent="%%PINT_USER_AGENT%%"`) do (
 			set "dist=%%i"
 			SET _parsed=1
 		)
 
-		if not defined _parsed (
-			exit /b 1
-		)
+		if not defined _parsed exit /b 1
 	)
 
 	if not defined dist exit /b 1
@@ -518,11 +514,10 @@ rem "Application ID" "Destination directory"
 	if not "!dist!"=="!dist:fosshub.com/=!" (
 		set dist=!dist:fosshub.com/=fosshub.com/genLink/!
 		set dist=!dist:.html/=/!
-		for /f "usebackq tokens=* delims=" %%i in (`%CURL% -s !referer! "!dist!"`) do (
+		for /f "usebackq tokens=* delims=" %%i in (`%%CURL%% -s !referer! "!dist!"`) do (
 			set "dist=%%i"
 		)
 	)
-
 	call :_get_url_info dist %~2
 	exit /b !ERRORLEVEL!
 
@@ -532,20 +527,19 @@ rem "@ref URL" "@ref Result (without quotes!)"
 	if "!%~1!"=="" ( echo Incorrect arguments. && exit /b 1 )
 	if "%2"=="" ( echo Incorrect arguments. && exit /b 1 )
 	endlocal
-	set "%2[type]="
-	set "%2[size]="
-	set "%2[name]="
-	set "%2[ext]="
-	for /f "tokens=* delims=" %%i in ("!%~1!") do (
+	for %%i in (type size name ext url protocol code) do set "%2[%%i]="
+
+	for %%i in ("!%~1!") do (
 		set "%2[name]=%%~nxi"
 		set "%2[ext]=%%~xi"
 		if not "!%2[ext]!"=="" set "%2[ext]=!%2[ext]:~1!"
 	)
-	set "%2[url]=!%~1!"
-	set "%2[protocol]="
-	set "%2[code]="
 
-	for /f "usebackq tokens=1,* delims=: " %%a in (`%CURL: --fail=% -s -S -I "!%~1!"`) do (
+	set "%2[url]=!%~1!"
+
+	call :_where curl || exit /b 0
+
+	for /f "usebackq tokens=1,* delims=: " %%a in (`%%CURL%% -s -S -I "!%~1!"`) do (
 		set "_key=%%a"
 		if /I "!_key:~0,5!"=="HTTP/" (
 			for /f "tokens=1" %%s in ("%%b") do set "%2[code]=%%~s"
@@ -637,10 +631,11 @@ rem "@ref File path" "@ref Destination directory"
 				if /I "%%~xi"==".zip" (
 					call %PINT% unzip "%%~i" "!%~2!"
 				) else (
+					echo Unable to find 7-zip.
 					exit /b 1
 				)
 			) else (
-				>nul "%ComSpec%" /d /c 7z x -y -aoa -o"!%~2!" "%%~i"
+				>nul call "%PINT_APPS_DIR%\7z.bat" x -y -aoa -o"!%~2!" "%%~i"
 			)
 		)
 		if errorlevel 1 (
@@ -758,14 +753,13 @@ rem "Application ID" "Directory" "delete"
 
 rem "@ref URL" "@ref Destination file"
 :_download
-	echo Downloading !%~1[url]!
-	if not exist "!%~dp2!" md "!%~dp2!"
+	echo Downloading !%~1!
+	if not exist "!%~2!\.." md "!%~2!\.."
 	call :_where curl
 	if errorlevel 1 (
-		echo "!%~1[url]!" "!%~2!"
-		call %PINT% download-file "%~1[url]" "!%~2!"
+		call %PINT% download-file "%~1" "%~2"
 	) else (
-		"%ComSpec%" /d /c %CURL% -o "!%~2!" "!%~1[url]!"
+		"%ComSpec%" /d /c %CURL% -o "!%~2!" "!%~1!"
 	)
 	if errorlevel 1 (
 		echo Download FAILED^^!
@@ -779,6 +773,14 @@ rem "@ref URL" "@ref Destination file"
 rem "Path" "@ref Filename"
 :_filename
 	endlocal & set "%~2=%~nx1"
+	exit /b 0
+
+
+:_db_exists
+	if not exist %PINT_PACKAGES_FILE% (
+		echo Unable to find a package database, updating...
+		call :update || ( echo Update failed. && exit /b 1 )
+	)
 	exit /b 0
 
 
@@ -986,11 +988,21 @@ rem "INI file path" "Section" "Key" "@ref Value"
 
 rem Installs missing executables
 rem "Executable path" "Application ID"
-:_has
-	call :_where %1 && exit /b 0
-	echo Pint depends on %1, trying to install it automatically. Please wait...
-	if not "%~2"=="" ( call :reinstall %2 ) else ( call :reinstall %1 )
-	call :_where %1
+:_setup
+	if not exist "%PINT_APPS_DIR%" md "%PINT_APPS_DIR%"
+
+	set "_install="
+	call :_where curl || set "_install=curl"
+	call :_where 7z || set "_install=7-zip !_install!"
+	call :_where xidel || set "_install=xidel !_install!"
+	if not defined _install exit /b 0
+	if "!_install:~-1!"==" " set "_install=!_install:~0,-1!"
+
+	echo Pint needs to install some small dependencies in order to work (!_install!).
+	set /p _confirm=Install them now? [Y/N] 
+	if /I not "!_confirm!"=="Y" exit /b 1
+
+	call :reinstall !_install!
 	exit /b !ERRORLEVEL!
 
 
@@ -1038,10 +1050,11 @@ switch ($env:_COMMAND) {
 	}
 	download-file {
 		try {
-			(new-object System.Net.WebClient).DownloadFile([Environment]::GetEnvironmentVariable($env:_PARAM_1), $env:_PARAM_2)
-			if ($env:_PARAM_2 -and !(Test-Path $env:_PARAM_2)) {
-				exit 1
-			}
+			$url = [Environment]::GetEnvironmentVariable($env:_PARAM_1).Replace("`"","")
+			$file = [Environment]::GetEnvironmentVariable($env:_PARAM_2).Replace("`"","")
+			[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+			(new-object System.Net.WebClient).DownloadFile($url, $file)
+			if ($file -and !(Test-Path $file)) { exit 1 }
 		} catch {
 			exit 1
 		}
