@@ -1,16 +1,12 @@
-@if (true == false) @end /*
-<# : Batch + JScript + PowerShell polyglot
+<# : Batch/PowerShell hybrid
 @echo off
-
-if "%~1"=="" (
-	call "%~f0" usage
-	exit /b 0
-)
-
+if "%~1"=="" call "%~f0" usage && exit /b 0
 @setlocal enabledelayedexpansion
 
 rem PINT - Portable INsTaller
 rem https://github.com/vensko/pint
+
+SET PINT="%~f0"
 
 rem Set variables if they weren't overriden earlier
 if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0packages"
@@ -19,14 +15,24 @@ if not defined PINT_PACKAGES_FILE set PINT_PACKAGES_FILE="%~dp0packages.ini"
 if not defined PINT_PACKAGES_FILE_USER set PINT_PACKAGES_FILE_USER="%~dp0packages.user.ini"
 if not defined PINT_SRC_FILE set PINT_SRC_FILE="%~dp0sources.list"
 if not defined PINT_TEMP_FILE set PINT_TEMP_FILE="%TEMP%\pint.tmp"
-if not defined PINT_HISTORY_FILE set PINT_HISTORY_FILE="%~dp0local.ini"
-
 if not defined PINT_USER_AGENT (
-	set "PINT_USER_AGENT=User-Agent^: Mozilla/5.0 ^(Windows NT 6.1^; WOW64^; rv^:40.0^) Gecko/20100101 Firefox/40.1"
+	set "PINT_USER_AGENT=User-Agent: Mozilla/5.0 ^(Windows NT 6.1; rv:40.0^) Gecko/20100101 Firefox/40.1"
 )
 
-SET PINT="%~f0"
-path !PINT_APPS_DIR!;%PATH%
+rem PowerShell
+for %%x in (usage shim download-file unzip) do (
+	if "%~1"=="%%x" (
+		SET "_COMMAND=%~1"
+		if not "%~2"=="" SET "_PARAM_1=%~2"
+		if not "%~3"=="" SET "_PARAM_2=%~3"
+		if not "%~4"=="" SET "_PARAM_3=%~4"
+		if not "%~5"=="" SET "_PARAM_4=%~5"
+		powershell -NonInteractive -NoLogo -NoProfile -executionpolicy bypass "iex (${%~f0} | out-string)"
+		exit /b !ERRORLEVEL!
+	)
+)
+
+path %PINT_APPS_DIR%;%PATH%
 
 rem Hardcoded URLs
 set "PINT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini"
@@ -39,76 +45,28 @@ SET FORFILES="%WINDIR%\system32\forfiles.exe"
 SET MSIEXEC="%WINDIR%\system32\msiexec.exe"
 SET ROBOCOPY="%WINDIR%\system32\robocopy.exe"
 
-rem Functions accessible directly from the command line
-SET BAT_FUNCTIONS=self-update update subscribe subscribed install reinstall list unsubscribe dir tracked
-SET BAT_FUNCTIONS=!BAT_FUNCTIONS! download remove purge upgrade search outdated pin unpin _get_url_info installto
-SET JS_FUNCTIONS=unzip
-SET PS_FUNCTIONS=usage shim download-file
-
 SET CURL=curl --insecure --ssl-no-revoke --ssl-allow-beast --progress-bar --remote-header-name --location
-SET CURL=!CURL! --create-dirs --fail --max-redirs 5 --retry 2 --retry-delay 1 -X GET
-SET POWERSHELL=powershell -NonInteractive -NoLogo -NoProfile -executionpolicy bypass
-SET JSCRIPT="%WINDIR%\system32\cscript.exe" //nologo //e:jscript !PINT!
+SET CURL=%CURL% --create-dirs --fail --max-redirs 5 --retry 2 --retry-delay 1 -X GET
 
 rem Create directories if needed
-if not exist "!PINT_APPS_DIR!" (
-	md "!PINT_APPS_DIR!"
-)
+if not exist "%PINT_APPS_DIR%" md "%PINT_APPS_DIR%"
 
-if not exist !PINT_HISTORY_FILE! (
-	>nul copy /y NUL !PINT_HISTORY_FILE!
-)
+call :_has xidel || ( echo Unable to install Xidel.&&	exit /b 1 )
+call :_has 7z 7-zip || ( echo Unable to install 7-zip.&& exit /b 1 )
+call :_has curl || ( echo Unable to install curl.&& exit /b 1 )
 
-if not "%~1"=="update" (
-	if not exist !PINT_PACKAGES_FILE! (
-		call :update
-	)
-)
+rem Functions accessible directly from the command line
+SET BAT_FUNCTIONS=self-update update subscribe subscribed install reinstall list unsubscribe dir tracked
+SET BAT_FUNCTIONS=%BAT_FUNCTIONS% download remove purge upgrade search outdated pin unpin installto
 
-rem JScript
-for %%x in (!JS_FUNCTIONS!) do (
-	if "%~1"=="%%x" (
-		!JSCRIPT! %*
-		exit /b !ERRORLEVEL!
-	)
-)
-
-rem PowerShell
-for %%x in (!PS_FUNCTIONS!) do (
-	if "%~1"=="%%x" (
-		SET "_COMMAND=%~1"
-		if not "%~2"=="" SET "_PARAM_1=%~2"
-		if not "%~3"=="" SET "_PARAM_2=%~3"
-		if not "%~4"=="" SET "_PARAM_3=%~4"
-		if not "%~5"=="" SET "_PARAM_4=%~5"
-		!POWERSHELL! "iex ( ${!PINT:~1,-1!} | select -skip 1 | out-string)"
-		exit /b !ERRORLEVEL!
-	)
-)
-
-call :_has xidel || (
-	echo Unable to install Xidel.
-	exit /b 1
-)
-call :_has 7z 7-zip || (
-	echo Unable to install 7-zip.
-	exit /b 1
-)
-call :_has curl || (
-	echo Unable to install curl.
-	exit /b 1
-)
-
-rem Ready, steady, go
-for %%x in (!BAT_FUNCTIONS!) do (
+for %%x in (%BAT_FUNCTIONS%) do (
 	if "%~1"=="%%x" (
 		call :%*
-		if exist !PINT_TEMP_FILE! del !PINT_TEMP_FILE!
-		exit /b
+		exit /b !ERRORLEVEL!
 	)
 )
 
-echo Unknown command
+echo Unknown command.
 exit /b 1
 
 
@@ -119,13 +77,13 @@ rem *****************************************
 
 :self-update
 :: Update Pint.
-	echo Fetching !PINT_SELF_URL!
+	echo Fetching %PINT_SELF_URL%
 
-	if exist !PINT_TEMP_FILE! del !PINT_TEMP_FILE!
+	if exist %PINT_TEMP_FILE% del %PINT_TEMP_FILE%
 
-	"%ComSpec%" /d /c !CURL! -s -S -o !PINT_TEMP_FILE! "!PINT_SELF_URL!" && (
-		>nul !FINDSTR! /L /C:"PINT - Portable INsTaller" !PINT_TEMP_FILE! && (
-			>nul move /Y !PINT_TEMP_FILE! !PINT! && (
+	"%ComSpec%" /d /c %CURL% -s -S -o %PINT_TEMP_FILE% "%PINT_SELF_URL%" && (
+		>nul %FINDSTR% /L /C:"PINT - Portable INsTaller" %PINT_TEMP_FILE% && (
+			>nul move /Y %PINT_TEMP_FILE% %PINT% && (
 				echo Pint was updated to the latest version.
 				exit /b 0
 			)
@@ -139,49 +97,46 @@ rem *****************************************
 :update
 :: Download package databases and combine them into packages.ini.
 	echo Updating the database...
-	if not exist !PINT_SRC_FILE! (
-		>!PINT_SRC_FILE! echo !PINT_PACKAGES!
+
+	if not exist %PINT_SRC_FILE% >%PINT_SRC_FILE% echo %PINT_PACKAGES%
+
+	>nul copy /y NUL %PINT_PACKAGES_FILE%
+
+	for /f "usebackq" %%f in ("%PINT_SRC_FILE:~1,-1%") do (
+		>>%PINT_PACKAGES_FILE% "%ComSpec%" /d /c %CURL% --compressed -s -S "%%f"
+		if not errorlevel 1 (echo Fetched %%f) else (echo Failed to fetch %%f)
 	)
 
-	>nul copy /y NUL !PINT_PACKAGES_FILE!
-	SET /a _count=0
+	echo Done.
 
-	for /f "usebackq tokens=* delims=" %%f in ("!PINT_SRC_FILE:~1,-1!") do (
-		set /p ="Fetching %%f "<nul
-		set /a _count+=1
-
-		>>!PINT_PACKAGES_FILE! "%ComSpec%" /d /c !CURL! --compressed -s -S "%%f" || (
-			echo - failed^^!
-			set /a _count-=1
-		)
-	)
-
-	echo.
-	set /p ="Merged !_count! source"<nul
-	if not !_count!==1 (echo s) else (echo.)
-
+	for %%f in (%PINT_PACKAGES_FILE%) do if "%%~zf"=="0" exit /b 1
 	exit /b 0
 
 
 :search :: [<term>]
 :: Search for an app in the database, or show all items.
-	if not exist !PINT_PACKAGES_FILE! (
-		echo Unable to find a package database, updating...
-		call :update
+	call :_db_exists
+
+	if exist %PINT_PACKAGES_FILE_USER% (
+		%FINDSTR% /I /B /R "\s*\[.*%~1.*\]" %PINT_PACKAGES_FILE_USER% | %SORT%
 	)
 
-	if exist !PINT_PACKAGES_FILE_USER! (
-		!FINDSTR! /I /B /R "\s*\[.*%~1.*\]" !PINT_PACKAGES_FILE_USER! | !SORT!
-	)
-
-	!FINDSTR! /I /B /R "\s*\[.*%~1.*\]" !PINT_PACKAGES_FILE! | !SORT!
+	%FINDSTR% /I /B /R "\s*\[.*%~1.*\]" %PINT_PACKAGES_FILE% | %SORT%
 
 	exit /b !ERRORLEVEL!
 
 
+:_db_exists
+	if not exist %PINT_PACKAGES_FILE% (
+		echo Unable to find a package database, updating...
+		call :update || ( echo Update failed. && exit /b 1 )
+	)
+	exit /b 0
+
+
 :subscribed
 :: Show the list of databases, you are subscribed to.
-	type !PINT_SRC_FILE!
+	type %PINT_SRC_FILE%
 	exit /b !ERRORLEVEL!
 
 
@@ -193,14 +148,14 @@ rem *****************************************
 		exit /b 1
 	)
 
-	>nul !FINDSTR! /L /X "%~1" !PINT_SRC_FILE! && (
+	>nul !FINDSTR! /L /X "%~1" %PINT_SRC_FILE% && (
 		echo This URL is already registered.
 		exit /b 1
 	)
 
-	>!PINT_TEMP_FILE! echo %~1
-	>>!PINT_TEMP_FILE! type !PINT_SRC_FILE!
-	>nul move /Y !PINT_TEMP_FILE! !PINT_SRC_FILE!
+	>%PINT_TEMP_FILE% echo %~1
+	>>%PINT_TEMP_FILE% type %PINT_SRC_FILE%
+	>nul move /Y %PINT_TEMP_FILE% %PINT_SRC_FILE%
 
 	echo Registered %~1
 	echo.
@@ -217,13 +172,13 @@ rem *****************************************
 		exit /b 1
 	)
 
-	>nul !FINDSTR! /L /X "%~1" !PINT_SRC_FILE! || (
+	>nul %FINDSTR% /L /X "%~1" %PINT_SRC_FILE% || (
 		echo This URL is not registered.
 		exit /b 1
 	)
 
-	>!PINT_TEMP_FILE! !FINDSTR! /X /L /V "%~1" !PINT_SRC_FILE!
-	>nul move /Y !PINT_TEMP_FILE! !PINT_SRC_FILE!
+	>%PINT_TEMP_FILE% %FINDSTR% /X /L /V "%~1" %PINT_SRC_FILE%
+	>nul move /Y %PINT_TEMP_FILE% %PINT_SRC_FILE%
 
 	echo Unregistered %~1
 	echo.
@@ -247,7 +202,7 @@ rem *****************************************
 rem "@ref File/directory" "@ref Result"
 :_get_app
 	set "_path=%~1"
-	if "!_path!"=="!_path::=!" set "_path=!PINT_APPS_DIR!\%~1"
+	if "!_path!"=="!_path::=!" set "_path=%PINT_APPS_DIR%\%~1"
 
 	if /I not "%~x1"==".pint" (
 		for /f "usebackq delims=" %%x in (`2^>nul dir /b /ah "!_path!\*.pint"`) do (
@@ -291,10 +246,10 @@ rem "@ref File/directory" "@ref Result"
 :: Check for updates for all or some packages by your choice.
 	if not "%~1"=="" (
 		for %%x in (%*) do (
-			if exist "!PINT_APPS_DIR!\%%~x" (
+			if exist "%PINT_APPS_DIR%\%%~x" (
 				call :_package_outdated "%%~x"
 			) else (
-				echo Not found: !PINT_APPS_DIR!\%%~x
+				echo Not found: %PINT_APPS_DIR%\%%~x
 			)
 		)
 	) else (
@@ -314,7 +269,7 @@ rem "Path"
 		exit /b 0
 	)
 
-	call :_get_dist_info "!app[id]!" url || (
+	>nul call :_get_dist_info "!app[id]!" url || (
 		echo Unable to get a link for %~1.
 		exit /b 1
 	)
@@ -349,7 +304,7 @@ rem "Path"
 		exit /b 0
 	)
 
-	call :_get_dist_info "!app[id]!" url || (
+	>nul call :_get_dist_info "!app[id]!" url || (
 		echo Unable to get a link for %~1.
 		exit /b 1
 	)
@@ -357,7 +312,7 @@ rem "Path"
 	call :_url_is_updated app url && (
 		call :_get_dist_file "!app[id]!" url _destfile
 		call :_download url[url] _destfile && (
-			call :_force_install "!app[id]!" "!PINT_APPS_DIR!\%~1"
+			call :_force_install "!app[id]!" "%PINT_APPS_DIR%\%~1"
 			exit /b !ERRORLEVEL!
 		)
 	)
@@ -396,10 +351,10 @@ rem "Path"
 		for %%x in (%*) do call :remove "%%~x"
 		exit /b 0
 	)
-	if exist "!PINT_APPS_DIR!\%~1" (
+	if exist "%PINT_APPS_DIR%\%~1" (
 		echo Uninstalling %~1...
-		2>nul rd /S /Q "!PINT_APPS_DIR!\%~1"
-		call :_shims %1 "!PINT_APPS_DIR!\%~1" delete
+		2>nul rd /S /Q "%PINT_APPS_DIR%\%~1"
+		call :_shims %1 "%PINT_APPS_DIR%\%~1" delete
 	) else (
 		echo %~1 is not installed
 	)
@@ -413,7 +368,7 @@ rem "Path"
 		exit /b 0
 	)
 	call :remove %1
-	2>nul del /Q /S "!PINT_DIST_DIR!\%~1--*.*"
+	2>nul del /Q /S "%PINT_DIST_DIR%\%~1--*.*"
 	exit /b !ERRORLEVEL!
 
 
@@ -423,7 +378,7 @@ rem "Path"
 		for %%x in (%*) do call :forget "%%~x"
 		exit /b 0
 	)
-	2>nul del /Q /S /AH "!PINT_APPS_DIR!\%~1\*.pint"
+	2>nul del /Q /S /AH "%PINT_APPS_DIR%\%~1\*.pint"
 	echo %~1 is no longer managed by Pint.
 	exit /b
 
@@ -452,7 +407,7 @@ rem "Path"
 		)
 	)
 
-	2>nul del /Q /S "!PINT_DIST_DIR!\%~1--*.*"
+	2>nul del /Q /S "%PINT_DIST_DIR%\%~1--*.*"
 
 	call :_download url _destfile || (
 		echo Unable to download a package with %1.
@@ -465,7 +420,7 @@ rem "Path"
 rem "Application ID" "@ref URL" "@ref Result"
 :_get_dist_file
 	endlocal
-	set "%~3=!PINT_DIST_DIR!\%~1--!%~2[name]!"
+	set "%~3=%PINT_DIST_DIR%\%~1--!%~2[name]!"
 	exit /b 0
 
 
@@ -501,7 +456,7 @@ rem "Application ID []"
 rem "Application ID" "Destination directory"
 :_force_install
 	call :download %1
-	call :_install_app_to %1 "!PINT_APPS_DIR!\%~2"
+	call :_install_app_to %1 "%PINT_APPS_DIR%\%~2"
 	exit /b !ERRORLEVEL!
 
 
@@ -514,7 +469,7 @@ rem "Application ID" "Destination directory"
 	call :_is_dir_upgradable %1 || exit /b 1
 	call :_get_app %1 app || set "app[id]=%~1"
 	call :download "!app[id]!"
-	call :_install_app_to "!app[id]!" "!PINT_APPS_DIR!\%~1"
+	call :_install_app_to "!app[id]!" "%PINT_APPS_DIR%\%~1"
 	exit /b !ERRORLEVEL!
 
 
@@ -548,7 +503,6 @@ rem "Application ID" "Destination directory"
 		SET _parsed=
 
 		echo Extracting a download link from !dist!
-
 		for /f "usebackq tokens=* delims=" %%i in (`2^>nul xidel "!dist!" !follow! --quiet --extract "(!link:%%=%%%%!)[1]" --header="Referer^: !dist!" --user-agent="!PINT_USER_AGENT!"`) do (
 			set "dist=%%i"
 			SET _parsed=1
@@ -681,7 +635,7 @@ rem "@ref File path" "@ref Destination directory"
 			call :_where 7z
 			if errorlevel 1 (
 				if /I "%%~xi"==".zip" (
-					!JSCRIPT! unzip "%%~i" "!%~2!"
+					call %PINT% unzip "%%~i" "!%~2!"
 				) else (
 					exit /b 1
 				)
@@ -773,13 +727,13 @@ rem "@ref App"
 
 rem "Path"
 :_is_dir_non_empty
-	if exist "!PINT_APPS_DIR!\%~1\*" exit /b 0
+	if exist "%PINT_APPS_DIR%\%~1\*" exit /b 0
 	exit /b 1
 
 
 rem "Path"
 :_is_dir_upgradable
-	if exist "!PINT_APPS_DIR!\%~1\* pinned*.pint" (
+	if exist "%PINT_APPS_DIR%\%~1\* pinned*.pint" (
 		echo %~1 updates are suppressed. To allow this action, use `pint unpin %~1`.
 		exit /b 1
 	)
@@ -788,7 +742,7 @@ rem "Path"
 
 rem "Path"
 :_is_dir_tracked
-	if not exist "!PINT_APPS_DIR!\%~1\*.pint" (
+	if not exist "%PINT_APPS_DIR%\%~1\*.pint" (
 		echo %~1 is not tracked by Pint, try to reinstall it.
 		exit /b 1
 	)
@@ -798,7 +752,7 @@ rem "Path"
 rem "Application ID" "Directory" "delete"
 :_shims
 	call :_db %1 shim noshim
-	call !PINT! shim %2 "!shim!" "!noshim!" %3
+	call %PINT% shim %2 "!shim!" "!noshim!" %3
 	exit /b 0
 
 
@@ -830,9 +784,11 @@ rem "Path" "@ref Filename"
 
 rem "Application ID" "@ref Keys[]"
 :_db
+	call :_db_exists
+
 	if "!ini[%~1]!"=="" (
-		call :_read_ini !PINT_PACKAGES_FILE! "%~1" ini
-		if exist !PINT_PACKAGES_FILE_USER! call :_read_ini !PINT_PACKAGES_FILE_USER! "%~1" ini
+		call :_read_ini %PINT_PACKAGES_FILE% "%~1" ini
+		if exist %PINT_PACKAGES_FILE_USER% call :_read_ini %PINT_PACKAGES_FILE_USER% "%~1" ini
 	)
 	set _i=1
 	for %%x in (%*) do (
@@ -938,7 +894,7 @@ rem "INI file path" "Section" "Key" "@ref Value"
 	SET _pending=
 	SET _header=
 
-	>nul copy /y NUL !PINT_TEMP_FILE!
+	>nul copy /y NUL %PINT_TEMP_FILE%
 
 	for /f "usebackq tokens=1* delims=^=" %%A in ("%~1") do (
 		for /f "tokens=*" %%M in ("%%A") do set _key=%%M
@@ -966,10 +922,10 @@ rem "INI file path" "Section" "Key" "@ref Value"
 			if not defined _section (
 				if not defined _header (
 					if defined _pending (
-						>>!PINT_TEMP_FILE! echo !_pending!
+						>>%PINT_TEMP_FILE% echo !_pending!
 						SET _pending=
 					)
-					>>!PINT_TEMP_FILE! echo !_key! = !_value!
+					>>%PINT_TEMP_FILE% echo !_key! = !_value!
 				)
 			)
 		) else (
@@ -977,10 +933,10 @@ rem "INI file path" "Section" "Key" "@ref Value"
 			if defined _header (
 				if not defined _added (
 					if not "%~4"=="" (
-						>>!PINT_TEMP_FILE! echo %~3 = %~4
+						>>%PINT_TEMP_FILE% echo %~3 = %~4
 						SET _added=1
 						if defined _pending (
-							>>!PINT_TEMP_FILE! echo !_pending!
+							>>%PINT_TEMP_FILE% echo !_pending!
 							SET _pending=
 						)
 					)
@@ -991,19 +947,19 @@ rem "INI file path" "Section" "Key" "@ref Value"
 					if /I "!_key!"=="%~3" (
 						if not "%~4"=="" (
 							if defined _pending (
-								>>!PINT_TEMP_FILE! echo !_pending!
+								>>%PINT_TEMP_FILE% echo !_pending!
 								SET _pending=
 							)
-							>>!PINT_TEMP_FILE! echo %~3 = %~4
+							>>%PINT_TEMP_FILE% echo %~3 = %~4
 							SET _added=1
 						)
 					) else (
 						if not defined _header (
 							if defined _pending (
-								>>!PINT_TEMP_FILE! echo !_pending!
+								>>%PINT_TEMP_FILE% echo !_pending!
 								SET _pending=
 							)
-							>>!PINT_TEMP_FILE! echo !_key! = !_value!
+							>>%PINT_TEMP_FILE% echo !_key! = !_value!
 						)
 					)
 				)
@@ -1015,15 +971,15 @@ rem "INI file path" "Section" "Key" "@ref Value"
 		if not defined _added (
 			if not "%~4"=="" (
 				if defined _pending (
-					>>!PINT_TEMP_FILE! echo !_pending!
+					>>%PINT_TEMP_FILE% echo !_pending!
 					SET _pending=
 				)
-				>>!PINT_TEMP_FILE! echo %~3 = %~4
+				>>%PINT_TEMP_FILE% echo %~3 = %~4
 			)
 		)
 	)
 
-	>nul move /Y !PINT_TEMP_FILE! !_file!
+	>nul move /Y %PINT_TEMP_FILE% !_file!
 
 	exit /b 0
 
@@ -1039,37 +995,12 @@ rem "Executable path" "Application ID"
 
 
 :_where
-	if exist "!PINT_APPS_DIR!\%~1.bat" exit /b 0
+	if exist "%PINT_APPS_DIR%\%~1.bat" exit /b 0
 	exit /b 1
-
 
 goto :eof
 
-**/
-
-if (WScript.Arguments.length === 0) WScript.quit(0);
-
-var app = new ActiveXObject("Shell.Application");
-//var env = (new ActiveXObject("WScript.Shell")).Environment("Process");
-var fso = new ActiveXObject("Scripting.FileSystemObject");
-
-switch (WScript.Arguments(0)) {
-	case "unzip":
-		var file = WScript.Arguments(1);
-		var dir = WScript.Arguments(2);
-		if (!fso.FolderExists(dir)) fso.CreateFolder(dir);
-	    var zip = app.NameSpace(WScript.Arguments(1));
-	    app.NameSpace(WScript.Arguments(2)).CopyHere(zip.Items(), 4 + 16);
-		if (!fso.FileExists(dir + "\\" + zip.Items().Item(0))) {
-			WScript.quit(1);
-		}
-		WScript.quit(0);
-		break;
-}
-
-WScript.quit(0);
-
-/* end JScript / begin PowerShell #>
+end Batch / begin PowerShell #>
 
 switch ($env:_COMMAND) {
 	usage {
@@ -1097,6 +1028,13 @@ switch ($env:_COMMAND) {
 		""
 		"`<app`> refers to an ID from the database, which can be seen via the search command."
 		"`<path`> refers to a relative path to an app in the 'apps' directory as shown by the list command."
+	}
+	unzip {
+		$shell = New-Object -com Shell.Application
+		$zip = $shell.NameSpace($env:_PARAM_1)
+		if (!(Test-Path $env:_PARAM_2)) { New-Item $env:_PARAM_2 -type directory | Out-Null }
+		$shell.Namespace($env:_PARAM_2).copyhere($zip.items(), 20)
+		if (!(Test-Path "$env:_PARAM_2\$($zip.items().item(0).Name)")) { exit 1 }
 	}
 	download-file {
 		try {
@@ -1166,5 +1104,3 @@ switch ($env:_COMMAND) {
 }
 
 exit 0
-
-# end PowerShell */
