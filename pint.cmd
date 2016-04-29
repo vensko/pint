@@ -235,29 +235,41 @@ $global:httpMaxRedirects = 5
 $global:httpTimeout = 10000
 $DebugPreference = 'Continue'
 
-function usage
+function pint-usage
 {
+	$commands = @{
+		'self-update' = 'Update Pint.'
+		'update' = 'Download package databases and combine them into packages.ini.'
+		'search [<term>]' = 'Search for an app in the database, or show all items.'
+		'subscribed' = 'Show the list of databases, you are subscribed to.'
+		'subscribe <url>' = 'Add a subscription to a package database.'
+		'unsubscribe <url>' = 'Remove the URL from the list of subscriptions.'
+		'list' = 'Show all applications installed via Pint.'
+		'outdated [<path>]' = 'Check for updates for all or some packages by your choice.'
+		'upgrade [<path>]' = 'Install updates for all or selected apps.'
+		'pin <path>' = 'Suppress updates for selected apps.'
+		'unpin <path>' = 'Allow updates for selected apps.'
+		'remove <path>' = 'Delete selected apps (this is equivalent to manual deletion).'
+		'purge <path>' = 'Delete selected apps AND their installers.'
+		'forget <path>' = 'Stop tracking of selected apps.'
+		'download <app>' = 'Only download selected installers without unpacking them.'
+		'installto <app> <path> ' = 'Install the app to the given path.'
+		'install <app>' = 'Install one or more apps to directories with the same names.'
+		'reinstall <path>' = 'Force reinstallation of the package.'
+	}
+
 	write-host "PINT - Portable INsTaller" -f white
 	""
 	"Usage:"
 	write-host "pint `<command`> `<parameters`>" -f yellow
 	""
 	"Available commands:"
-	foreach ($line in (gc $env:PINT.Replace("`"",""))) {
-		if ($line.StartsWith("::")) {
-			if ($command -eq 1) {
-				write-host $line.replace(":: ", "")
-				$command = 0
-			} else {
-				write-host "".padright(19, " ") -nonewline
-				write-host $line.replace(":: ", "")
-			}
-		} elseif ($line.StartsWith(":") -and -not $line.StartsWith(":_")) {
-			write-host $line.substring(1).replace(":: ", "").padright(18, " ") -f green -nonewline
-			write-host " " -nonewline
-			$command = 1
-		}
+
+	foreach ($cmd in $commands.keys) {
+		write-host $cmd.padright(18, " ") -f green -nonewline
+		write-host $commands[$cmd]
 	}
+
 	""
 	"`<app`> refers to an ID from the database, which can be seen via the search command."
 	"`<path`> refers to a relative path to an app in the 'apps' directory as shown by the list command."
@@ -273,8 +285,6 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, $delete)
 		ea = 0
 	}
 
-	write-host "Creating shims for $dir"
-
 	if ($include) {
 		$includeArr = $include -split ' ', $null, 'SimpleMatch'
 		$params['include'] = @('*.exe') + $includeArr
@@ -285,24 +295,23 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, $delete)
 	cd $env:PINT_APPS_DIR
 
 	dir $dir @params |% {
-		write-host "$_"
 		$exe = $_
 		$relpath = join-path $dir $_
 
 		if ([System.IO.Path]::GetExtension($_) -eq '.exe' -and (!$includeArr -or !($includeArr |? { $exe -like $_ }))) {
 			$subsystem = $null
 			try {
-				$fs = [IO.File]::OpenRead($relpath);
-				$br = New-Object IO.BinaryReader($fs);
+				$fs = [IO.File]::OpenRead($relpath)
+				$br = New-Object IO.BinaryReader($fs)
 				if ($br.ReadUInt16() -ne 23117) { return }
-				$fs.Position = 0x3C;
-				$fs.Position = $br.ReadUInt32();
-				$offset = $fs.Position;
+				$fs.Position = 0x3C
+				$fs.Position = $br.ReadUInt32()
+				$offset = $fs.Position
 				if ($br.ReadUInt32() -ne 17744) { return }
-				# $fs.Position += 0x14;
+				# $fs.Position += 0x14
 				# switch ($br.ReadUInt16()) { 0x10B { $arch = 32 } 0x20B { $arch = 64 } }
-				$fs.Position = $offset + 4 + 20 + 68;
-				$subsystem = $br.ReadUInt16();
+				$fs.Position = $offset + 4 + 20 + 68
+				$subsystem = $br.ReadUInt16()
 			} catch {} finally {
 				if ($br -ne $null) { $br.Close() }
 				if ($fs -ne $null) { $fs.Close() }
@@ -389,14 +398,14 @@ function pint-has($exe)
 	test-path (join-path $env:PINT_APPS_DIR "$exe.bat") -pathtype leaf
 }
 
-function pint-unpack([string]$file, [string]$d)
+function pint-unpack([string]$file, [string]$dir)
 {
 	if (!(test-path $file)) {
 		write-host 'Unable to find' $file
 		return
 	}
 
-	if (!(test-path $d -pathtype container)) { md $d -ea stop | out-null }
+	if (!(test-path $dir -pathtype container)) { md $dir -ea stop | out-null }
 
 	$filename = [System.IO.Path]::GetFileName($file)
 
@@ -407,13 +416,13 @@ function pint-unpack([string]$file, [string]$d)
 
 	switch ([System.IO.Path]::GetExtension($file)) {
 		".msi" {
-			& $env:ComSpec /d /c "msiexec /a `"$fullPath`" /norestart /qn TARGETDIR=`"$d`""
+			& $env:ComSpec /d /c "msiexec /a `"$fullPath`" /norestart /qn TARGETDIR=`"$dir`""
 			break
 		}
 		{!$sevenzip -and ($_ -eq '.zip')} {
 			$shell = new-object -com Shell.Application
 			$zip = $shell.NameSpace($fullPath)
-			$shell.Namespace($d).copyhere($zip.items(), 20)
+			$shell.Namespace($dir).copyhere($zip.items(), 20)
 			break
 		}
 		".exe" {
@@ -422,7 +431,7 @@ function pint-unpack([string]$file, [string]$d)
 					write-host "Pint needs innoextract to unpack $filename, installing automatically..."
 					pint-reinstall @('innoextract')
 				}
-				& innoextract -s -c -p -d $d $fullPath
+				& innoextract -s -c -p -d $dir $fullPath
 				break
 			}
 		}
@@ -432,7 +441,7 @@ function pint-unpack([string]$file, [string]$d)
 				pint-reinstall @('7-zip')
 			}
 
-			& $env:ComSpec /d /c "7z x -y -aoa -o`"$d`" `"$fullPath`"" | out-null
+			& $env:ComSpec /d /c "7z x -y -aoa -o`"$dir`" `"$fullPath`"" | out-null
 		}
 	}
 
@@ -469,10 +478,10 @@ function pint-read-ini([string]$file, [string]$term)
 	$result
 }
 
-function pint-get-version([string]$d)
+function pint-get-version([string]$dir)
 {
 	try {
-		$v = (dir $d -recurse -filter *.exe -ea stop | sort -property length -descending | select -first 1).VersionInfo.FileVersion.trim()
+		$v = (dir $dir -recurse -filter *.exe -ea stop | sort -property length -descending | select -first 1).VersionInfo.FileVersion.trim()
 		if ($v.contains(' ')) { return }
 		if ($v.contains(',')) { $v = $v.replace(',', '.') }
 		while ($v.substring($v.length-2, 2) -eq '.0') { $v = $v.substring(0, $v.length-2) }
@@ -685,14 +694,14 @@ function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
 		$targetStream = new-object -TypeName System.IO.FileStream -ArgumentList $targetFile, Create
 		$buffer = new-object byte[] 32KB
 		$count = $responseStream.Read($buffer, 0, $buffer.length)
-		$downloadedBytes = $count
+		$downloaded = $count
 		$progressBar = ($res.ContentLength -gt 1MB)
 		while ($count -gt 0) {
 			$targetStream.Write($buffer, 0, $count)
 			$count = $responseStream.Read($buffer, 0, $buffer.length)
 			if ($progressBar) {
-				$downloadedBytes += $count
-				write-progress -activity "Downloading file $remoteName" -status "Downloaded ($([System.Math]::Floor($downloadedBytes/1024))K of $($totalLength)K): " -PercentComplete ((([System.Math]::Floor($downloadedBytes/1024)) / $totalLength)  * 100)
+				$downloaded += $count
+				write-progress -activity "Downloading file $remoteName" -status "Downloaded ($([System.Math]::Floor($downloaded / 1024))K of $($totalLength)K): " -PercentComplete ((([System.Math]::Floor($downloaded / 1024)) / $totalLength)  * 100)
 			}
 		}
 		write-progress -completed -activity "Downloading file $remoteName" -status "Done"
