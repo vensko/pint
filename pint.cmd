@@ -1,12 +1,11 @@
 <# :
 @echo off
-@setlocal enabledelayedexpansion
+@setlocal
 
 rem PINT - Portable INsTaller
 rem https://github.com/vensko/pint
 
 SET "PINT=%~f0"
-SET "PINT_VERSION=1.0"
 
 rem Set variables if they weren't overriden earlier
 if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0dist"
@@ -15,7 +14,7 @@ if not defined PINT_PACKAGES_FILE set "PINT_PACKAGES_FILE=%~dp0packages.ini"
 if not defined PINT_PACKAGES_FILE_USER set "PINT_PACKAGES_FILE_USER=%~dp0packages.user.ini"
 if not defined PINT_SRC_FILE set "PINT_SRC_FILE=%~dp0sources.list"
 if not defined PINT_TEMP_FILE set "PINT_TEMP_FILE=%TEMP%\pint.tmp"
-if not defined PINT_USER_AGENT set "PINT_USER_AGENT=PintBot/%PINT_VERSION% (+https://github.com/vensko/pint)"
+if not defined PINT_USER_AGENT set "PINT_USER_AGENT=PintBot/1.0 (+https://github.com/vensko/pint)"
 
 SET "FINDSTR=%WINDIR%\system32\findstr.exe"
 SET "FIND=%WINDIR%\system32\find.exe"
@@ -31,23 +30,20 @@ rem Hardcoded URLs
 set "PINT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini"
 set "PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.bat"
 
-rem SET CURL=curl -X GET -k -# -J -L -f -A "%PINT_USER_AGENT%" --create-dirs
-rem SET CURL=%CURL% --ssl-no-revoke --ssl-allow-beast --create-dirs --max-redirs 5 --retry 2 --retry-delay 1
-
 rem Functions accessible directly from the command line
-SET BATCH=list search subscribed subscribe unsubscribe pin unpin forget _download
+SET BATCH=search subscribed subscribe unsubscribe pin unpin forget
 
 for %%x in (%BATCH%) do (
 	if "%~1"=="%%x" (
-		call :%*
-		exit /b !ERRORLEVEL!
+		call :%* || exit /b 1
+		exit /b 0
 	)
 )
 
 set "_args=%*"
-if defined _args set "_args=!_args:"=""""""!"
-%POWERSHELL% "$s = ${%~f0} | out-string; $s += """pint-start !_args!"""; iex($s)"
-exit /b !ERRORLEVEL!
+if defined _args set "_args=%_args:"=""""""%"
+%POWERSHELL% "$s = ${%PINT%} | out-string; $s += """pint-start %_args%"""; iex($s)" || exit /b 1
+exit /b 0
 
 
 rem *****************************************
@@ -55,28 +51,22 @@ rem  FUNCTIONS
 rem *****************************************
 
 
-:search :: [<term>]
-:: Search for an app in the database, or show all items.
+:search
 	if exist "%PINT_PACKAGES_FILE_USER%" (
 		"%FINDSTR%" /I /B /R "\s*\[.*%~1.*\]" "%PINT_PACKAGES_FILE_USER%" | "%SORT%"
 	)
-
 	"%FINDSTR%" /I /B /R "\s*\[.*%~1.*\]" "%PINT_PACKAGES_FILE%" | "%SORT%"
-
-	exit /b !ERRORLEVEL!
+	exit /b
 
 
 :subscribed
-:: Show the list of databases, you are subscribed to.
-	type "%PINT_SRC_FILE%"
-	exit /b !ERRORLEVEL!
+	type "%PINT_SRC_FILE%" || exit /b 1
+	exit /b 0
 
 
-:subscribe :: <url>
-:: Add a subscription to a package database.
-:: Essentially, it has to be a direct URL of an .ini file.
+:subscribe
 	if "%~1"=="" (
-		echo Enter an URL^^!
+		echo Enter an URL!
 		exit /b 1
 	)
 
@@ -97,10 +87,9 @@ rem *****************************************
 	exit /b 0
 
 
-:unsubscribe :: <url>
-:: Remove the URL from the list of subscriptions.
+:unsubscribe
 	if "%~1"=="" (
-		echo Enter an URL^^!
+		echo Enter an URL!
 		exit /b 1
 	)
 
@@ -117,22 +106,11 @@ rem *****************************************
 	echo Your new source list:
 	call :subscribed
 
-	exit /b !ERRORLEVEL!
+	exit /b
 
 
-:list
-:: Show all applications installed via Pint.
-	for /f "usebackq delims=" %%s in (`2^>nul dir /b /s /ah "%PINT_APPS_DIR%\*.pint"`) do (
-		set "_dir=%%s"
-		set "_dir=!_dir:%PINT_APPS_DIR%\=!"
-		set "_dir=!_dir:\%%~nxs=!"
-		echo !_dir!
-	)
-	exit /b 0
-
-
-:pin :: <path>
-:: Suppress updates for selected apps.
+:pin
+	@setlocal enabledelayedexpansion
 	if not "%~2"=="" (
 		for %%x in (%*) do call :pin "%%~x"
 		exit /b 0
@@ -152,18 +130,20 @@ rem *****************************************
 		)
 		ren "%PINT_APPS_DIR%\%~1\%%s" "!_file!.pint"
 	)
-	exit /b !ERRORLEVEL!
+	exit /b
 
 
-:unpin :: <path>
-:: Allow updates for selected apps.
+:unpin
 	set "_unpin=1"
 	call :pin %*
-	exit /b 0
+	exit /b
 
 
-:forget :: <path>
-:: Stop tracking of selected apps.
+:forget
+	if "%~1"=="" (
+		echo Choose a path!
+		exit /b 1
+	)
 	if not "%~2"=="" (
 		for %%x in (%*) do call :forget "%%~x"
 		exit /b 0
@@ -173,106 +153,51 @@ rem *****************************************
 	exit /b
 
 
-rem "@ref URL" "@ref Destination file"
-:_download
-	echo Downloading !%~1!
-	if not exist "!%~2!\.." md "!%~2!\.."
-	%POWERSHELL% -command "&{ (new-object System.Net.WebClient).DownloadFile($env:%~1, $env:%~2) }"
-	exit /b !ERRORLEVEL!
-
-
-:self-update
-:: Update Pint.
-	echo Fetching %PINT_SELF_URL%
-
-	if exist "%PINT_TEMP_FILE%" del "%PINT_TEMP_FILE%"
-
-	call :_download PINT_SELF_URL PINT_TEMP_FILE && (
-		>nul "%FINDSTR%" /L /C:"PINT - Portable INsTaller" "%PINT_TEMP_FILE%" && (
-			>nul move /Y "%PINT_TEMP_FILE%" "%PINT%" && (
-				echo Pint was updated to the latest version.
-				exit /b 0
-			)
-		)
-	)
-
-	echo Self-update failed^^!
-	exit /b 1
-
-
-:update
-:: Download package databases and combine them into packages.ini.
-	echo Updating the database...
-
-	if not exist "%PINT_SRC_FILE%" >"%PINT_SRC_FILE%" echo %PINT_PACKAGES%
-
-	>nul copy /y NUL "%PINT_PACKAGES_FILE%"
-
-	for /f "usebackq" %%f in ("%PINT_SRC_FILE%") do (
-		set "_url=%%f"
-		call :_download _url PINT_TEMP_FILE
-		>>"%PINT_PACKAGES_FILE%" type "%PINT_TEMP_FILE%"
-		if not errorlevel 1 (echo Fetched %%f) else (echo Failed to fetch %%f)
-	)
-
-	echo Done.
-
-	for %%f in ("%PINT_PACKAGES_FILE%") do (
-		if "%%~zf"=="0" (
-			2>nul del /Q "%PINT_PACKAGES_FILE%"
-			exit /b 1
-		)
-	)
-
-	exit /b 0
-
 goto :eof
 
 end Batch / begin PowerShell #>
 
-$global:ini = @{}
 $global:httpMaxRedirects = 5
 $global:httpTimeout = 10000
 $DebugPreference = 'Continue'
+$global:ini = @{}
 
 function pint-usage
 {
-	$commands = @{
-		'self-update' = 'Update Pint.'
-		'update' = 'Download package databases and combine them into packages.ini.'
-		'search [<term>]' = 'Search for an app in the database, or show all items.'
-		'subscribed' = 'Show the list of databases, you are subscribed to.'
-		'subscribe <url>' = 'Add a subscription to a package database.'
-		'unsubscribe <url>' = 'Remove the URL from the list of subscriptions.'
-		'list' = 'Show all applications installed via Pint.'
-		'outdated [<path>]' = 'Check for updates for all or some packages by your choice.'
-		'upgrade [<path>]' = 'Install updates for all or selected apps.'
-		'pin <path>' = 'Suppress updates for selected apps.'
-		'unpin <path>' = 'Allow updates for selected apps.'
-		'remove <path>' = 'Delete selected apps (this is equivalent to manual deletion).'
-		'purge <path>' = 'Delete selected apps AND their installers.'
-		'forget <path>' = 'Stop tracking of selected apps.'
-		'download <app>' = 'Only download selected installers without unpacking them.'
-		'installto <app> <path> ' = 'Install the app to the given path.'
-		'install <app>' = 'Install one or more apps to directories with the same names.'
-		'reinstall <path>' = 'Force reinstallation of the package.'
+	$commands = @(
+		@('self-update', 'Update Pint.'),
+		@('update', 'Download package databases and combine them into packages.ini.'),
+		@('search [<term>]', 'Search for an app in the database, or show all items.'),
+		@('installto <app> <dir> ', 'Install the app to the given directory.'),
+		@('install <app>', 'Install one or more apps to directories with the same names.'),
+		@('reinstall <dir>', 'Force reinstallation of the package.'),
+		@('list', 'Show all applications installed via Pint.'),
+		@('l', 'Show only names of installed applications.'),
+		@('outdated [<dir>]', 'Check for updates for all or some packages by your choice.'),
+		@('upgrade [<dir>]', 'Install updates for all or selected apps.'),
+		@('pin <dir>', 'Suppress updates for selected apps.'),
+		@('unpin <dir>', 'Allow updates for selected apps.'),
+		@('remove <dir>', 'Delete selected apps (this is equivalent to manual deletion).'),
+		@('purge <dir>', 'Delete selected apps AND their installers.'),
+		@('forget <dir>', 'Stop tracking of selected apps.'),
+		@('download <app>', 'Only download selected installers without unpacking them.'),
+		@('subscribed', 'Show the list of databases, you are subscribed to.'),
+		@('subscribe <url>', 'Add a subscription to a package database.'),
+		@('unsubscribe <url>', 'Remove the URL from the list of subscriptions.')
+	)
+
+	write-host "PINT - Portable INsTaller`n" -f white
+	write-host "Usage:"
+	write-host "pint `<command`> `<parameters`>`n" -f yellow
+	write-host "Available commands:"
+
+	foreach ($cmd in $commands) {
+		write-host $cmd[0].padright(23, ' ') -f green -nonewline
+		write-host $cmd[1]
 	}
 
-	write-host "PINT - Portable INsTaller" -f white
-	""
-	"Usage:"
-	write-host "pint `<command`> `<parameters`>" -f yellow
-	""
-	"Available commands:"
-
-	foreach ($cmd in $commands.keys) {
-		write-host $cmd.padright(18, " ") -f green -nonewline
-		write-host $commands[$cmd]
-	}
-
-	""
-	"`<app`> refers to an ID from the database, which can be seen via the search command."
-	"`<path`> refers to a relative path to an app in the 'apps' directory as shown by the list command."
+	write-host "`n`<app`> is a database ID, which can be seen via the search command."
+	write-host "`<dir`> is a path, relative to the 'apps' directory, as shown by the list command."
 }
 
 function pint-shims([string]$dir, [string]$include, [string]$exclude, $delete)
@@ -425,8 +350,8 @@ function pint-unpack([string]$file, [string]$dir)
 			$shell.Namespace($dir).copyhere($zip.items(), 20)
 			break
 		}
-		".exe" {
-			if (& $env:FINDSTR /m /c:"Inno Setup" $file) {
+		default {
+			if (($_ -eq '.exe') -and (& $env:FINDSTR /m /c:"Inno Setup" $file)) {
 				if (!(pint-has 'innoextract')) {
 					write-host "Pint needs innoextract to unpack $filename, installing automatically..."
 					pint-reinstall @('innoextract')
@@ -434,8 +359,7 @@ function pint-unpack([string]$file, [string]$dir)
 				& innoextract -s -c -p -d $dir $fullPath
 				break
 			}
-		}
-		default {
+
 			if (!(pint-has '7z')) {
 				write-host "Pint needs 7-zip to unpack $filename, installing automatically..."
 				pint-reinstall @('7-zip')
@@ -668,8 +592,11 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 function pint-is-app-outdated([Hashtable]$app, $download)
 {
 	if (($url = pint-get-dist-link $app $verbose) -and ($res = pint-make-request $url $download)) {
-		if ($res.ContentLength -eq $app['size']) { $res = $null; return $false }
-		else { return $res }
+		if ($res.ContentLength -eq $app['size']) {
+			if ($download) { $res.close() }
+			return $false
+		}
+		$res
 	}
 }
 
@@ -707,8 +634,10 @@ function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
 		write-progress -completed -activity "Downloading file $remoteName" -status "Done"
 		$targetStream.Flush()
 		$targetStream.Close()
-		$targetStream.Dispose()
-		$responseStream.Dispose()
+		if ($targetStream.Dispose -ne $null) {
+			$targetStream.Dispose()
+			$responseStream.Dispose()
+		}
 		$res.Close()
 
 		$targetFile
@@ -719,8 +648,8 @@ function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
 
 function pint-get-remote-name([System.Net.WebResponse]$res)
 {
-	if ($res.headers['Content-Disposition'] -and $res.headers['Content-Disposition'].contains('=')) {
-		$name = ($res.headers['Content-Disposition'] -split '=', 2, 'SimpleMatch')[1].replace('"', '').trim()
+	if (($h = $res.headers['Content-Disposition']) -and $h.contains('=')) {
+		$name = ($h -split '=', 2, 'SimpleMatch')[1].replace('"', '').trim()
 	} else {
 		$name = ([string]$res.ResponseUri -split '/', $null, 'SimpleMatch')[-1]
 	}
@@ -863,31 +792,10 @@ function pint-test
 ############## Controllers
 
 
-function pint-outdated
-{
-	write-host 'Checking for updates...'
-
-	$args | % {
-		try {
-			$app = pint-get-app $_
-
-			if (!$app) { write-host $_ 'not found.'; return }
-			if (!$app['size']) { write-host "Detected an app in $_, but the size data is missing."; return }
-
-			$path = $_
-			switch (pint-is-app-outdated $app) {
-				$null { write-host 'Unable to check updates for' $path }
-				$false { write-host $path 'is up to date.' }
-				default { write-host $path 'is OUTDATED.' }
-			}
-		} catch {
-			write-host $_ -f yellow
-		}
-	}
-}
-
 function pint-reinstall
 {
+	if (!$args.count) { write-host 'Set a directory to reinstall.'; return }
+
 	$args | % {
 		try {
 			if (!(pint-dir-upgradable $_)) { return }
@@ -905,6 +813,8 @@ function pint-reinstall
 
 function pint-download
 {
+	if (!$args.count) { write-host 'Set an ID to download.'; return }
+
 	$args | % {
 		try {
 			pint-download-app $_ | out-null
@@ -916,11 +826,14 @@ function pint-download
 
 function pint-install
 {
+	if (!$args.count) { write-host 'Set an ID to install.'; return }
 	$args | % { pint-installto $_ $_ }
 }
 
 function pint-installto([string]$id, [string]$dir)
 {
+	if (!$id -or !$dir) { write-host 'Set an ID and a destination directory.'; return }
+
 	if (!(pint-dir-empty $dir)) {
 		if (pint-dir-tracked $dir) {
 			write-host $dir 'is not empty. Use reinstall to force this action.'
@@ -936,12 +849,15 @@ function pint-installto([string]$id, [string]$dir)
 
 function pint-purge
 {
+	if (!$args.count) { write-host 'Set a directory to purge.'; return }
 	pint-remove @args
 	$args | % { del (join-path $env:PINT_DIST_DIR "$_--*.*") -force }
 }
 
 function pint-remove
 {
+	if (!$args.count) { write-host 'Set a directory to remove.'; return }
+
 	$args | % {
 		$dir = pint-dir $_
 
@@ -957,25 +873,64 @@ function pint-remove
 	}
 }
 
+function max-length($array)
+{
+	$max = 0
+	$array | % { if ($_.length -gt $max) { $max = $_.length } }
+	$max
+}
+
+function pint-outdated
+{
+	write-host 'Checking for updates...'
+
+	if (!$args.count) { $args = pint-l }
+	$pad = (max-length $args) + 2
+
+	$args | % {
+		write-host $_.padright($pad, ' ') -nonewline
+
+		try {
+			$app = pint-get-app $_
+
+			if (!$app) { write-host 'NOT FOUND' -f red; return }
+			if (!$app['size']) { write-host 'NO SIZE DATA' -f darkyellow; return }
+
+			switch (pint-is-app-outdated $app) {
+				$null { write-host 'FAIL' -f red }
+				$false { write-host 'UP TO DATE' -f green }
+				default { write-host 'OUTDATED' -f yellow }
+			}
+		} catch {
+			write-host $_ -f yellow
+		}
+	}
+}
+
 function pint-upgrade
 {
 	write-host 'Checking for updates...'
 
+	if (!$args.count) { $args = pint-l }
+	$pad = (max-length $args) + 2
+
 	$args | % {
+		write-host $_.padright($pad, ' ') -nonewline
+
 		try {
 			$app = pint-get-app $_
-			if (!$app) { write-host "$_ is not found."; return }
+			if (!$app) { write-host 'NOT FOUND' -f red; return }
 
 			if ($res = pint-is-app-outdated $app $true) {
-				write-host "$_ is OUTDATED."
+				write-host 'OUTDATED' -f yellow
 				$file = pint-download-app $_ $null $res
 				if (!$file) { return }
 				pint-file-install $app['id'] $file $app['dir']
 			} else {
 				if ($res -eq $null) {
-					write-host "Unable to check updates for $_"
+					write-host 'FAIL' -f red
 				} else {
-					write-host "$_ is up to date."
+					write-host 'UP TO DATE' -f green
 				}
 			}
 		} catch {
@@ -984,9 +939,59 @@ function pint-upgrade
 	}
 }
 
+function pint-l
+{
+	dir $env:PINT_APPS_DIR -n -r -force -filter *.pint | % { [System.IO.Path]::GetDirectoryName($_) }
+}
+
+function pint-list($detailed)
+{
+	$table = @()
+	$fso = new-object -com Scripting.FileSystemObject
+	pint-l | % {
+		$fullpath = join-path $env:PINT_APPS_DIR $_
+		$table += new-object –TypeName PSObject –Prop @{
+			Directory = $_
+			Size = pint-get-folder-size $fullpath $fso
+			Version = pint-get-version $fullpath
+		}
+	}
+	$table | ft Directory,Version,Size -autosize
+}
+
+function pint-self-update
+{
+	write-host 'Fetching' $env:PINT_SELF_URL
+	$res = (new-object System.Net.WebClient).DownloadString($env:PINT_SELF_URL)
+	if ($res -and $res.contains('PINT - Portable INsTaller')) {
+		$res | out-file $env:PINT -encoding ascii
+		write-host 'Pint was updated to the latest version.'
+	} else {
+		write-host 'Self-update failed!'
+		exit 1
+	}
+}
+
+function pint-update
+{
+	write-host 'Updating the database...'
+	$client = new-object System.Net.WebClient;
+	$result = ''
+	cat -LiteralPath $env:PINT_SRC_FILE | % {
+		$res = $client.DownloadString($_.trim())
+		if ($res) {
+			write-host 'Fetched' $_
+			$result += $res
+		} else {
+			write-host 'Failed to fetch' $_
+		}
+	}
+	$result | out-file $env:PINT_PACKAGES_FILE -encoding ascii
+}
+
 function pint-start($cmd)
 {
-	if (!$cmd) { usage; exit 0 }
+	if (!$cmd) { pint-usage; exit 0 }
 
 	$cmd = 'pint-' + $cmd
 
