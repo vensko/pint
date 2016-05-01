@@ -9,7 +9,7 @@ SET "PINT=%~f0"
 
 rem Set variables if they weren't overriden earlier
 if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0dist"
-if not defined PINT_APPS_DIR set "PINT_APPS_DIR=%~dp0apps"
+if not defined PINT_APP_DIR set "PINT_APP_DIR=%~dp0apps"
 if not defined PINT_PACKAGES_FILE set "PINT_PACKAGES_FILE=%~dp0packages.ini"
 if not defined PINT_PACKAGES_FILE_USER set "PINT_PACKAGES_FILE_USER=%~dp0packages.user.ini"
 if not defined PINT_SRC_FILE set "PINT_SRC_FILE=%~dp0sources.list"
@@ -22,9 +22,9 @@ SET "SORT=%WINDIR%\system32\sort.exe"
 SET "FORFILES=%WINDIR%\system32\forfiles.exe"
 SET "MSIEXEC=%WINDIR%\system32\msiexec.exe"
 SET "ROBOCOPY=%WINDIR%\system32\robocopy.exe"
-SET "POWERSHELL=powershell -NonInteractive -NoLogo -NoProfile -executionpolicy bypass"
+SET "POWERSHELL=powershell -NoLogo -NoProfile -executionpolicy bypass"
 
-path %PINT_APPS_DIR%;%PATH%
+path %PINT_APP_DIR%;%PATH%
 
 rem Hardcoded URLs
 set "PINT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini"
@@ -115,11 +115,11 @@ rem *****************************************
 		for %%x in (%*) do call :pin "%%~x"
 		exit /b 0
 	)
-	if not exist "%PINT_APPS_DIR%\%~1\*.pint" (
+	if not exist "%PINT_APP_DIR%\%~1\*.pint" (
 		echo %~1 is not tracked by Pint, try to reinstall it.
 		exit /b 1
 	)
-	for /f "usebackq delims=" %%s in (`dir /b /ah "%PINT_APPS_DIR%\%~1\*.pint"`) do (
+	for /f "usebackq delims=" %%s in (`dir /b /ah "%PINT_APP_DIR%\%~1\*.pint"`) do (
 		set "_file=%%~ns"
 		if defined _unpin (
 			set "_file=!_file: pinned=!"
@@ -128,7 +128,7 @@ rem *****************************************
 			set "_file=!_file: pinned=! pinned"
 			echo %~1 is pinned.
 		)
-		ren "%PINT_APPS_DIR%\%~1\%%s" "!_file!.pint"
+		ren "%PINT_APP_DIR%\%~1\%%s" "!_file!.pint"
 	)
 	exit /b
 
@@ -148,7 +148,7 @@ rem *****************************************
 		for %%x in (%*) do call :forget "%%~x"
 		exit /b 0
 	)
-	2>nul del /Q /S /AH "%PINT_APPS_DIR%\%~1\*.pint"
+	2>nul del /Q /S /AH "%PINT_APP_DIR%\%~1\*.pint"
 	echo %~1 is no longer managed by Pint.
 	exit /b
 
@@ -164,11 +164,16 @@ $global:ini = @{}
 
 function pint-usage
 {
+	write-host "PINT - Portable INsTaller`n" -f white
+	write-host "Usage:"
+	write-host "pint `<command`> `<parameters`>`n" -f yellow
+	write-host "Available commands:"
+
 	$commands = @(
 		@('self-update', 'Update Pint.'),
 		@('update', 'Download package databases and combine them into packages.ini.'),
 		@('search [<term>]', 'Search for an app in the database, or show all items.'),
-		@('installto <app> <dir> ', 'Install the app to the given directory.'),
+		@('installto <app> <dir> [<arch>] ', 'Install the app to the given directory.'),
 		@('install <app>', 'Install one or more apps to directories with the same names.'),
 		@('reinstall <dir>', 'Force reinstallation of the package.'),
 		@('list', 'Show all applications installed via Pint.'),
@@ -176,7 +181,7 @@ function pint-usage
 		@('outdated [<dir>]', 'Check for updates for all or some packages by your choice.'),
 		@('upgrade [<dir>]', 'Install updates for all or selected apps.'),
 		@('pin <dir>', 'Suppress updates for selected apps.'),
-		@('unpin <dir>', 'Allow updates for selected apps.'),
+		@('unpin <dir>', 'Allow updates for selected apps (undoes the pin command).'),
 		@('remove <dir>', 'Delete selected apps (this is equivalent to manual deletion).'),
 		@('purge <dir>', 'Delete selected apps AND their installers.'),
 		@('forget <dir>', 'Stop tracking of selected apps.'),
@@ -185,11 +190,6 @@ function pint-usage
 		@('subscribe <url>', 'Add a subscription to a package database.'),
 		@('unsubscribe <url>', 'Remove the URL from the list of subscriptions.')
 	)
-
-	write-host "PINT - Portable INsTaller`n" -f white
-	write-host "Usage:"
-	write-host "pint `<command`> `<parameters`>`n" -f yellow
-	write-host "Available commands:"
 
 	foreach ($cmd in $commands) {
 		write-host $cmd[0].padright(23, ' ') -f green -nonewline
@@ -217,7 +217,7 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, $delete)
 		$params['filter'] = '*.exe'
 	}
 
-	cd $env:PINT_APPS_DIR
+	cd $env:PINT_APP_DIR
 
 	dir $dir @params |% {
 		$exe = $_
@@ -245,7 +245,7 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, $delete)
 		}
 
 		$baseName = [System.IO.Path]::GetFileNameWithoutExtension($_)
-		$batch = join-path $env:PINT_APPS_DIR "$baseName.bat"
+		$batch = pint-dir "$baseName.bat"
 
 		if ($delete) {
 			if (test-path $batch) {
@@ -276,32 +276,31 @@ function merge-hashtables
 
 function pint-get-app([string]$p)
 {
-	try {
-		$p = pint-dir $p
+	$p = pint-dir $p
+	if (test-path $p -pathtype leaf) {
+		$f = $p
+		$dir = [System.IO.Path]::GetDirectoryName($f)
+	} else {
+		$f = dir (join-path $p '*.pint') -n -force -ea 0 | select -first 1
+		if (!$f) { return }
+		$f = join-path $p $f
+		$dir = $p
+	}
 
-		if (test-path $p -pathtype leaf) {
-			$f = $p
-			$dir = [System.IO.Path]::GetDirectoryName($f)
-		} else {
-			$f = dir (join-path $p '*.pint') -n -force -ea 0 | select -first 1
-			if (!$f) { return }
-			$f = join-path $p $f
-			$dir = $p
-		}
+	$a = [System.IO.Path]::GetFileNameWithoutExtension($f).trim() -split ' ', $null, 'SimpleMatch'
 
-		$a = [System.IO.Path]::GetFileNameWithoutExtension($f).trim() -split ' ', $null, 'SimpleMatch'
+	$app = @{
+		id = $a[0]
+		dir = $dir
+		arch = get-arch
+		pinned = $false
+		version = ""
+		size = 0
+	}
 
-		$app = @{
-			id = $a[0]
-			dir = $dir
-			arch = get-arch
-			pinned = $false
-			version = ""
-			size = 0
-		}
+	$a = if ($a[1]) {$a[1..($a.count-1)]} else {@()}
 
-		$a = if ($a[1]) {$a[1..($a.count-1)]} else {@()}
-
+	if ($a) {
 		$a | % {
 			switch ($_) {
 				32 { $app['arch'] = 32 }
@@ -311,16 +310,17 @@ function pint-get-app([string]$p)
 				default { $app['size'] = [int]$_ }
 			}
 		}
+	}
 
-		$app = merge-hashtables (pint-get-app-info $app['id'] $app['arch']) $app
-
-		$app
-	} catch {}
+	$ini = pint-get-app-info $app['id'] $app['arch']
+	if (!$ini) { return }
+	$app = merge-hashtables $ini $app
+	$app
 }
 
 function pint-has($exe)
 {
-	test-path (join-path $env:PINT_APPS_DIR "$exe.bat") -pathtype leaf
+	test-path (pint-dir "$exe.bat") -pathtype leaf
 }
 
 function pint-unpack([string]$file, [string]$dir)
@@ -337,7 +337,7 @@ function pint-unpack([string]$file, [string]$dir)
 	write-host 'Unpacking' $filename
 
 	$fullPath = [System.IO.Path]::GetFullPath($file)
-	$sevenzip = (test-path (join-path $env:PINT_APPS_DIR '7z.bat'))
+	$sevenzip = (test-path (pint-dir '7z.bat'))
 
 	switch ([System.IO.Path]::GetExtension($file)) {
 		".msi" {
@@ -405,7 +405,7 @@ function pint-read-ini([string]$file, [string]$term)
 function pint-get-version([string]$dir)
 {
 	try {
-		$v = (dir $dir -recurse -filter *.exe -ea stop | sort -property length -descending | select -first 1).VersionInfo.FileVersion.trim()
+		$v = (dir $dir -recurse -filter *.exe -ea stop | sort -property length -descending | select -first 1).VersionInfo.ProductVersion.trim()
 		if ($v.contains(' ')) { return }
 		if ($v.contains(',')) { $v = $v.replace(',', '.') }
 		while ($v.substring($v.length-2, 2) -eq '.0') { $v = $v.substring(0, $v.length-2) }
@@ -441,7 +441,7 @@ function pint-get-app-info([string]$id, $arch)
 	}
 
 	if ($res.keys.count) { $res['arch'] = $arch }
-
+	if (!$res['dist']) { return }
 	$res
 }
 
@@ -490,43 +490,37 @@ function pint-make-request([string]$url, $download)
 {
 	[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
-	try {
-		if ($url.StartsWith('ftp:')) {
-			$res = pint-make-ftp-request $url $download
-		} else {
-			$res = pint-make-http-request $url $download
-		}
-
-		if (!$res) {
-			write-host 'Failed to connect to' $url -f yellow
-			return
-		}
-
-		if (([string]$res.ContentType).StartsWith('text/')) {
-			$res.close()
-			write-host $url 'responded with a text content.' -f yellow
-			return
-		}
-
-		if ($res.ContentLength -lt 1) {
-			$res.close()
-			write-host 'Empty response from' $url -f yellow
-			return
-		}
-
-		if (!$download) { $res.close() }
-
-		$res
-
-	} catch [System.Net.WebException] {
-		write-host 'Failed to connect to' $url -f yellow
+	if ($url.StartsWith('ftp:')) {
+		$res = pint-make-ftp-request $url $download
+	} else {
+		$res = pint-make-http-request $url $download
 	}
+
+	if (!$res) {
+		write-host 'Failed to connect to' $url -f yellow
+		return
+	}
+
+	if (([string]$res.ContentType).StartsWith('text/')) {
+		$res.close()
+		write-host $url 'responded with a text content.' -f yellow
+		return
+	}
+
+	if ($res.ContentLength -lt 1) {
+		$res.close()
+		write-host 'Empty response from' $url -f yellow
+		return
+	}
+
+	if (!$download) { $res.close() }
+
+	$res
 }
 
 function pint-get-dist-link([Hashtable]$info, $verbose)
 {
 	if (!$info['dist']) {
-		write-host 'Invalid database entry.'
 		return
 	}
 
@@ -608,42 +602,38 @@ function pint-get-folder-size([string]$path, $fso)
 
 function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
 {
-	try {
-		$dir = [System.IO.Path]::GetDirectoryName($targetFile)
-		if (!(test-path $dir)) { md $dir -ea stop | out-null }
+	$dir = [System.IO.Path]::GetDirectoryName($targetFile)
+	if (!(test-path $dir)) { md $dir -ea stop | out-null }
 
-		$totalLength = [System.Math]::Floor($res.ContentLength / 1024)
+	$totalLength = [System.Math]::Floor($res.ContentLength / 1024)
 
-		write-host "Downloading $($res.ResponseUri) ($("{0:N2} MB" -f ($totalLength / 1024)))"
+	write-host "Downloading $($res.ResponseUri) ($("{0:N2} MB" -f ($totalLength / 1024)))"
 
-		$remoteName = pint-get-remote-name $res
-		$responseStream = $res.GetResponseStream()
-		$targetStream = new-object -TypeName System.IO.FileStream -ArgumentList $targetFile, Create
-		$buffer = new-object byte[] 32KB
+	$remoteName = pint-get-remote-name $res
+	$responseStream = $res.GetResponseStream()
+	$targetStream = new-object -TypeName System.IO.FileStream -ArgumentList $targetFile, Create
+	$buffer = new-object byte[] 32KB
+	$count = $responseStream.Read($buffer, 0, $buffer.length)
+	$downloaded = $count
+	$progressBar = ($res.ContentLength -gt 1MB)
+	while ($count -gt 0) {
+		$targetStream.Write($buffer, 0, $count)
 		$count = $responseStream.Read($buffer, 0, $buffer.length)
-		$downloaded = $count
-		$progressBar = ($res.ContentLength -gt 1MB)
-		while ($count -gt 0) {
-			$targetStream.Write($buffer, 0, $count)
-			$count = $responseStream.Read($buffer, 0, $buffer.length)
-			if ($progressBar) {
-				$downloaded += $count
-				write-progress -activity "Downloading file $remoteName" -status "Downloaded ($([System.Math]::Floor($downloaded / 1024))K of $($totalLength)K): " -PercentComplete ((([System.Math]::Floor($downloaded / 1024)) / $totalLength)  * 100)
-			}
+		if ($progressBar) {
+			$downloaded += $count
+			write-progress -activity "Downloading file $remoteName" -status "Downloaded ($([System.Math]::Floor($downloaded / 1024))K of $($totalLength)K): " -PercentComplete ((([System.Math]::Floor($downloaded / 1024)) / $totalLength)  * 100)
 		}
-		write-progress -completed -activity "Downloading file $remoteName" -status "Done"
-		$targetStream.Flush()
-		$targetStream.Close()
-		if ($targetStream.Dispose -ne $null) {
-			$targetStream.Dispose()
-			$responseStream.Dispose()
-		}
-		$res.Close()
-
-		$targetFile
-	} catch {
-		write-host 'Download failed:' $_ -f yellow
 	}
+	write-progress -completed -activity "Downloading file $remoteName" -status "Done"
+	$targetStream.Flush()
+	$targetStream.Close()
+	if ($targetStream.Dispose -ne $null) {
+		$targetStream.Dispose()
+		$responseStream.Dispose()
+	}
+	$res.Close()
+
+	$targetFile
 }
 
 function pint-get-remote-name([System.Net.WebResponse]$res)
@@ -682,17 +672,17 @@ function pint-download-app([string]$id, $arch, $res)
 	}
 }
 
-function pint-force-install([string]$id, [string]$dir)
+function pint-force-install([string]$id, [string]$dir, $arch)
 {
-	$file = pint-download-app $id
+	$file = pint-download-app $id $arch
 	if (!$file) { return }
-	pint-file-install $id $file $dir
+	pint-file-install $id $file $dir $arch
 }
 
 function pint-dir([string]$path)
 {
 	if (![System.IO.Path]::isPathRooted($path)) {
-		$path = join-path $env:PINT_APPS_DIR $path
+		$path = join-path $env:PINT_APP_DIR $path
 	}
 	$path
 }
@@ -716,7 +706,7 @@ function pint-dir-tracked([string]$path)
 	[bool](dir (pint-dir $path) -n -force -ea 0 -filter *.pint)
 }
 
-function pint-file-install([string]$id, [string]$file, [string]$destDir)
+function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 {
 	if (!(test-path $file)) {
 		throw [System.IO.FileNotFoundException] "Unable to find $file"
@@ -725,8 +715,9 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir)
 	if (!$destDir) { $destDir = $id }
 	$destDir = pint-dir $destDir
 
-	$info = pint-get-app $destDir
-	if (!$info) { $info = pint-get-app-info $id }
+	if (!($info = pint-get-app $destDir) -and !($info = pint-get-app-info $id)) {
+		throw [System.IO.FileNotFoundException] "Unable to find $id in the database."
+	}
 
 	if (!(test-path $destDir -pathtype container)) { md $destDir -ea stop | out-null }
 
@@ -773,6 +764,8 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir)
 		$version = "v$version"
 	}
 
+	if (($arch -eq 32) -or ($arch -eq 64)) { $info['arch'] = $arch }
+
 	$pintFile = (@($id, $version, $info['arch'], (new-object System.IO.FileInfo($file)).length) | where {$_}) -join " "
 	$pintFile = join-path $destDir "$pintFile.pint"
 
@@ -801,7 +794,7 @@ function pint-reinstall
 			if (!(pint-dir-upgradable $_)) { return }
 
 			if ($app = pint-get-app $_) {
-				pint-force-install $app['id'] $app['dir']
+				pint-force-install $app['id'] $app['dir'] $app['arch']
 			} else {
 				pint-force-install $_ $_
 			}
@@ -830,21 +823,17 @@ function pint-install
 	$args | % { pint-installto $_ $_ }
 }
 
-function pint-installto([string]$id, [string]$dir)
+function pint-installto([string]$id, [string]$dir, $arch)
 {
 	if (!$id -or !$dir) { write-host 'Set an ID and a destination directory.'; return }
 
 	if (!(pint-dir-empty $dir)) {
-		if (pint-dir-tracked $dir) {
-			write-host $dir 'is not empty. Use reinstall to force this action.'
-			return
-		} else {
-			write-host (pint-dir $dir) 'is not empty.'
-			$confirm = read-host -prompt 'Do you want to REPLACE its contents? [Y/N] '
-			if ($confirm.trim() -ne 'Y') { return }
-		}
+		write-host (pint-dir $dir) 'is not empty.'
+		$confirm = read-host -prompt 'Do you want to REPLACE its contents? [Y/N] '
+		if ($confirm.trim() -ne 'Y') { return }
 	}
-	pint-force-install $id $dir
+
+	pint-force-install $id $dir $arch
 }
 
 function pint-purge
@@ -897,12 +886,12 @@ function pint-outdated
 			if (!$app['size']) { write-host 'NO SIZE DATA' -f darkyellow; return }
 
 			switch (pint-is-app-outdated $app) {
-				$null { write-host 'FAIL' -f red }
+				$null { write-host 'REQUEST FAILED' -f red }
 				$false { write-host 'UP TO DATE' -f green }
 				default { write-host 'OUTDATED' -f yellow }
 			}
 		} catch {
-			write-host $_ -f yellow
+			write-host $_ -f red
 		}
 	}
 }
@@ -920,6 +909,7 @@ function pint-upgrade
 		try {
 			$app = pint-get-app $_
 			if (!$app) { write-host 'NOT FOUND' -f red; return }
+			if (!$app['size']) { write-host 'NO SIZE DATA' -f darkyellow; return }
 
 			if ($res = pint-is-app-outdated $app $true) {
 				write-host 'OUTDATED' -f yellow
@@ -928,35 +918,39 @@ function pint-upgrade
 				pint-file-install $app['id'] $file $app['dir']
 			} else {
 				if ($res -eq $null) {
-					write-host 'FAIL' -f red
+					write-host 'REQUEST FAILED' -f red
 				} else {
 					write-host 'UP TO DATE' -f green
 				}
 			}
 		} catch {
-			write-host $_ -f yellow
+			write-host $_ -f red
 		}
 	}
 }
 
 function pint-l
 {
-	dir $env:PINT_APPS_DIR -n -r -force -filter *.pint | % { [System.IO.Path]::GetDirectoryName($_) }
+	dir $env:PINT_APP_DIR -n -r -force -filter *.pint | % { [System.IO.Path]::GetDirectoryName($_) }
 }
 
 function pint-list($detailed)
 {
 	$table = @()
 	$fso = new-object -com Scripting.FileSystemObject
-	pint-l | % {
-		$fullpath = join-path $env:PINT_APPS_DIR $_
+	dir $env:PINT_APP_DIR -n -r -force -filter *.pint | % {
+		$dir = [System.IO.Path]::GetDirectoryName($_)
+		$name = [System.IO.Path]::GetFileNameWithoutExtension($_)
+		$arch = if ($name.contains(' 32 ')) {32} else {64}
+		$fullpath = pint-dir $dir
 		$table += new-object –TypeName PSObject –Prop @{
-			Directory = $_
+			Directory = $dir + '  '
 			Size = pint-get-folder-size $fullpath $fso
-			Version = pint-get-version $fullpath
+			Version = (pint-get-version $fullpath) + $(if ($name.contains(' pinned')) {' (pinned)'})
+			Arch = $arch
 		}
 	}
-	$table | ft Directory,Version,Size -autosize
+	$table | ft Directory,Version,Arch,Size -autosize
 }
 
 function pint-self-update
