@@ -307,7 +307,7 @@ function pint-get-app([string]$p)
 				64 { $app['arch'] = 64 }
 				'pinned' { $app['pinned'] = $true }
 				{$_[0] -eq 'v' -and $_ -match "^v[0-9\.]+$"} { $app['version'] = $_.substring(1) }
-				default { $app['size'] = [int]$_ }
+				default { if ($_ -match "^[0-9\.]+$") { $app['size'] = [int]$_ } }
 			}
 		}
 	}
@@ -406,8 +406,9 @@ function pint-get-version([string]$dir)
 {
 	try {
 		$v = (dir $dir -recurse -filter *.exe -ea stop | sort -property length -descending | select -first 1).VersionInfo.ProductVersion.trim()
-		if ($v.contains(' ')) { return }
 		if ($v.contains(',')) { $v = $v.replace(',', '.') }
+		if ($v.contains('-')) { $v = ($v -split '-', 2, 'SimpleMatch')[0] }
+		if (!($v -match "^[0-9\.]+$")) { return }
 		while ($v.substring($v.length-2, 2) -eq '.0') { $v = $v.substring(0, $v.length-2) }
 		$v
 	} catch {}
@@ -501,9 +502,9 @@ function pint-make-request([string]$url, $download)
 		return
 	}
 
-	if (([string]$res.ContentType).StartsWith('text/')) {
+	if ([string]$res.ContentType -eq 'text/html') {
 		$res.close()
-		write-host $url 'responded with a text content.' -f yellow
+		write-host $url 'responded with a HTML page.' -f yellow
 		return
 	}
 
@@ -526,10 +527,16 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 
 	$dist = $info['dist']
 	$link = $info['link']
+	$follow = $info['follow']
 
 	if (!$link) {
 		if ($dist.contains('portableapps.com/apps/')) {
 			$link = "//a[contains(@href, '.paf.exe')]"
+		} elseif ($dist.contains('filehippo.com/')) {
+			$follow = "(//a[contains(@class, 'program-header-download-link')])[1]"
+			$link = '//meta[@http-equiv="Refresh"]/@content'
+		} elseif ($dist.contains('/rss')) {
+			$link = '//item/link'
 		} elseif ($dist.EndsWith('.xml') -or $dist.EndsWith('/pad.php')) {
 			if ($verbose) { write-host 'PAD file detected.' }
 			$link = "//Primary_Download_URL"
@@ -542,16 +549,16 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 			pint-reinstall @('xidel')
 		}
 
-		if ($follow = $info['follow']) {
-			$follow = $follow.replace('"', "\`"").replace(' | ', '" --follow "')
-			$follow = " --follow `"$follow`""
-		}
-
-		if ($link.trimstart('/')[0] -eq 'a') {
+		if (!$link.contains('$json') -and $link.trimstart('/')[0] -eq 'a') {
 			$link += '/resolve-uri(normalize-space(@href), base-uri())'
 		}
 
 		$link = $link.replace('"', "\`"")
+
+		if ($follow) {
+			$follow = $follow.replace('"', "\`"").replace(' | ', '" --follow "')
+			$follow = " --follow `"$follow`""
+		}
 
 		if ($verbose) {
 			write-host 'Extracting a download link from' $dist
@@ -561,9 +568,11 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 			$out = '2>nul'
 		}
 
-		$dist = & $env:ComSpec /d /c "$out xidel `"$dist`" $follow $quiet --extract `"($link)[1]`" --header=`"Referer: $dist`" --user-agent=`"$($env:PINT_USER_AGENT)`""
+		$method = if ($info['method']) {'-d "'+$info['data']+'" --method '+$info['method']} else {''}
 
-		if ($lastexitcode) {
+		$dist = & $env:ComSpec /d /c "$out xidel $method --header=`"Referer: $dist`" --user-agent=`"$($env:PINT_USER_AGENT)`" `"$dist`" $follow $quiet --extract `"($link)[1]`""
+
+		if ($lastexitcode -or !$dist) {
 			$dist = $null
 		} else {
 			$dist = $dist.trim()
@@ -571,6 +580,8 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 			if ($dist.contains('fosshub.com/')) {
 				$dist = $dist.replace('fosshub.com/', 'fosshub.com/genLink/').replace('.html/', '/')
 				$dist = (new-object System.Net.WebClient).DownloadString($dist).trim()
+			} elseif ($info['dist'].contains('filehippo.com/')) {
+				$dist = 'http://filehippo.com' + ($dist -split '=', 2, 'SimpleMatch')[1]
 			}
 		}
 
@@ -656,7 +667,7 @@ function pint-download-app([string]$id, $arch, $res)
 
 	$name = pint-get-remote-name $res
 
-	$file = join-path $env:PINT_DIST_DIR "$id--$name"
+	$file = join-path $env:PINT_DIST_DIR "$id--$($info['arch'])--$name"
 
 	if (test-path $file) {
 		if ((new-object System.IO.FileInfo($file)).length -eq $res.ContentLength) {
@@ -737,19 +748,19 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 			throw [System.IO.FileNotFoundException] "Unable to use the temporary directory $tempDir"
 		}
 
-		if ($info['base']) {
-			foreach ($p in (dir $pwd -r -n)) {
-				if ($p.contains($info['base'])) {
-					cd "$p\.."
-					break
-				}
+		$base = if ($info['base']) {$info['base']} else {'.exe'}
+
+		foreach ($p in (dir $pwd -r -n)) {
+			if ($p.contains($base)) {
+				cd "$p\.."
+				break
 			}
 		}
 
 		$xf = $info['xf'] + ' *.pint $R0'
 		$xd = $info['xd'] + ' $0 $PLUGINSDIR $TEMP'
 
-		& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /E /PURGE /NJS /NJH /NFL /NDL /ETA /XF $xf /XD $xd" | out-null
+		& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /E /NJS /NJH /NFL /NDL /XO /FFT /XF $xf /XD $xd" | out-null
 
 		if ($lastexitcode -gt 7) {
 			write-host "Detected errors while copying from $pwd with Robocopy ($lastexitcode)."
