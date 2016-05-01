@@ -961,7 +961,7 @@ function pint-list($detailed)
 			Arch = $arch
 		}
 	}
-	$table | ft Directory,Version,Arch,Size -autosize
+	$table | ft Directory,Version,Size,Arch -autosize
 }
 
 function pint-self-update
