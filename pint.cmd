@@ -206,12 +206,12 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, $delete)
 		recurse = $true
 		force = $true
 		name = $true
-		exclude = $exclude -split ' ', $null, 'SimpleMatch' |? {$_}
+		exclude = $exclude -split ',', $null, 'SimpleMatch' |% {$_.trim()}  |? {$_}
 		ea = 0
 	}
 
 	if ($include) {
-		$includeArr = $include -split ' ', $null, 'SimpleMatch'
+		$includeArr = $include -split ',', $null, 'SimpleMatch' |% {$_.trim()}  |? {$_}
 		$params['include'] = @('*.exe') + $includeArr
 	} else {
 		$params['filter'] = '*.exe'
@@ -757,13 +757,61 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 			}
 		}
 
-		$xf = $info['xf'] + ' *.pint $R0'
-		$xd = $info['xd'] + ' $0 $PLUGINSDIR $TEMP'
+		$keep = if ($info['keep']) {$info['keep'] -split ',', $null, 'SimpleMatch' |% {$_.trim()}  |? {$_} } else {@('*.ini','*.db')}
 
-		& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /E /NJS /NJH /NFL /NDL /XO /FFT /XF $xf /XD $xd" | out-null
+		$params = @{
+			include = $keep
+			recurse = $true
+			force = $true
+			name = $true
+			ea = 0
+		}
 
-		if ($lastexitcode -gt 7) {
-			write-host "Detected errors while copying from $pwd with Robocopy ($lastexitcode)."
+		dir $destDir @params | % {
+			$p = join-path $destDir $_
+			if (test-path $p -pathtype container) {
+				if (!(test-path "$pwd\$_")) { md "$pwd\$_" | out-null }
+				copy "$p\*" "$pwd\$_" -recurse -force
+			} else {
+				$dir = [System.IO.Path]::GetDirectoryName("$pwd\$_")
+				if (!(test-path $dir)) { md $dir | out-null }
+				copy $p "$pwd\$_" -force
+			}
+		}
+
+		if ($info['only']) {
+			$only = $info['only'] -split ',', $null, 'SimpleMatch' |% {$_.trim()}  |? {$_}
+
+			$params = @{
+				include = $only
+				recurse = $true
+				force = $true
+				name = $true
+				ea = 0
+			}
+
+			dir $destDir @params | % { del "$destDir\$_" -force -recurse }
+
+			dir $pwd @params | % {
+				$p = join-path $pwd $_
+				if (test-path $p -pathtype container) {
+					if (!(test-path "$destDir\$_")) { md "$destDir\$_" | out-null }
+					copy "$p\*" "$destDir\$_" -recurse -force
+				} else {
+					$dir = [System.IO.Path]::GetDirectoryName("$destDir\$_")
+					if (!(test-path $dir)) { md $dir | out-null }
+					copy $p "$destDir\$_" -force
+				}
+			}
+		} else {
+			$xf = $info['xf'] + ' *.pint $R0'
+			$xd = $info['xd'] + ' $0 $PLUGINSDIR $TEMP'
+
+			& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /E /PURGE /NJS /NJH /NFL /NDL /NC /NP /NS /R:2 /W:2 /XO /FFT /XF $xf /XD $xd"
+
+			if ($lastexitcode -gt 7) {
+				write-host "Detected errors while copying from $pwd with Robocopy ($lastexitcode)."
+			}
 		}
 
 		cd $destDir
