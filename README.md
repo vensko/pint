@@ -54,7 +54,7 @@ To keep things simple, you may use only the *install* command. This way, databas
 installto firefox "Mozilla Firefox"
 ```
 FF will be installed into  
-D:\Pint\apps\**Mozilla Firefox**  
+D:\Pint\apps\\**Mozilla Firefox**  
 From this point, it will have to be referred to as "Mozilla Firefox".  
 
 Optionally, a preferred bit count can set with the third parameter (useful if you need to force installation of a 32-bit version in a 64-bit system).
