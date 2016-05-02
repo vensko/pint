@@ -37,7 +37,8 @@ If not, searches the databases for the *term*.
 ```
 download <app> [<app>]
 ```
-Downloads one or more apps into the *dist* directory without unpacking them. All downloaded packages are stored with filenames in the format *&lt;app&gt;--&lt;architecture&gt;--&lt;actual-filename&gt;*. Keep in mind, that the architecture attribute in Pint never refers to the actual bit count, but rather to a *preferred* value. If a 64-bit version of an app is not available yet and your processor is 64-bit, a 32-bit version will be downloaded and marked as 64. With a 64-bit version released, the app will be automatically upgraded from 32 to 64 bit.
+Downloads one or more apps into the *dist* directory without unpacking them. All downloaded packages are stored with filenames in the format *&lt;app&gt;--&lt;architecture&gt;--&lt;actual-filename&gt;*.  
+Keep in mind, that the architecture attribute in Pint never refers to the actual bit count, but rather to a *preferred* value. If a 64-bit version of an app is not available yet and your processor is 64-bit, a 32-bit version will be downloaded and marked as 64. With a 64-bit version released, the app will be automatically upgraded from 32 to 64 bit.
 ```
 install <app> [<app>]
 ```
@@ -53,9 +54,7 @@ To keep things simple, you may use only the *install* command. This way, databas
 installto firefox "Mozilla Firefox"
 ```
 FF will be installed into  
-
-*D:\Pint\apps\**Mozilla Firefox***  
-
+D:\Pint\apps\**Mozilla Firefox**  
 From this point, it will have to be referred to as "Mozilla Firefox".  
 
 Optionally, a preferred bit count can set with the third parameter (useful if you need to force installation of a 32-bit version in a 64-bit system).
