@@ -46,11 +46,8 @@ Downloads an archive (or a few) with the given apps into *dist* and unpacks them
 installto <app> <dir> [32|64]
 ```
 Here comes is a twist. In fact, you deal with app identifiers only during their download and/or installation. After that, all commands refer to actual subdirectories in *apps*, e.g.:  
-
-D:\Pint\apps\**firefox**  
-
-D:\Pint\apps\**foobar2000**  
-
+D:\Pint\apps\\**firefox**  
+D:\Pint\apps\\**foobar2000**  
 To keep things simple, you may use only the *install* command. This way, database identifiers and subdirectories will always be the same. But if you prefer storing your browser in *apps\Mozilla Firefox* instead of *apps\firefox*, this can be done with the *installto* command:
 ```
 installto firefox "Mozilla Firefox"
@@ -61,7 +58,7 @@ FF will be installed into
 
 From this point, it will have to be referred to as "Mozilla Firefox".  
 
-Optionally, a preferred bit count can set with the third parameter (this is useful if you need to force installation of a 32-bit version in a 64-bit system).
+Optionally, a preferred bit count can set with the third parameter (useful if you need to force installation of a 32-bit version in a 64-bit system).
 ```
 list
 ```
