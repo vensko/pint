@@ -52,6 +52,8 @@ rem *****************************************
 
 
 :search
+	if not exist "%PINT_PACKAGES_FILE%" call "%PINT%" update
+
 	if exist "%PINT_PACKAGES_FILE_USER%" (
 		"%FINDSTR%" /I /B /R "\s*\[.*%~1.*\]" "%PINT_PACKAGES_FILE_USER%" | "%SORT%"
 	)
@@ -423,6 +425,8 @@ function pint-get-app-info([string]$id, $arch)
 {
 	if (!$arch) { $arch = get-arch }
 
+	if (!(test-path $env:PINT_PACKAGES_FILE)) { pint-update }
+
 	$ini = merge-hashtables (pint-read-ini $env:PINT_PACKAGES_FILE $id) (pint-read-ini $env:PINT_PACKAGES_FILE_USER $id)
 
 	if (!$ini.keys.count) {
@@ -463,6 +467,7 @@ function pint-make-http-request([string]$url, $download, $disableAutoRedirect)
 		$req.AllowAutoRedirect = !$disableAutoRedirect
 		$req.MaximumAutomaticRedirections = $global:httpMaxRedirects
 		$req.Accept = '*/*'
+		$req.AuthenticationLevel = 'None'
 		$req.GetResponse()
 	} catch [System.Management.Automation.MethodInvocationException] {
 		$maxRedirects = $global:httpMaxRedirects
@@ -579,7 +584,7 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 
 			if ($dist.contains('fosshub.com/')) {
 				$dist = $dist.replace('fosshub.com/', 'fosshub.com/genLink/').replace('.html/', '/')
-				$dist = (new-object System.Net.WebClient).DownloadString($dist).trim()
+				$dist = (get-web-client).DownloadString($dist).trim()
 			} elseif ($info['dist'].contains('filehippo.com/')) {
 				$dist = 'http://filehippo.com' + ($dist -split '=', 2, 'SimpleMatch')[1]
 			}
@@ -615,6 +620,9 @@ function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
 {
 	$dir = [System.IO.Path]::GetDirectoryName($targetFile)
 	if (!(test-path $dir)) { md $dir -ea stop | out-null }
+
+	pint-test $res.ResponseUri $targetFile
+	return
 
 	$totalLength = [System.Math]::Floor($res.ContentLength / 1024)
 
@@ -757,7 +765,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 			}
 		}
 
-		$keep = if ($info['keep']) {$info['keep'] -split ',', $null, 'SimpleMatch' |% {$_.trim()}  |? {$_} } else {@('*.ini','*.db')}
+		$keep = if ($info['keep'] -ne $null) {$info['keep'] -split ',', $null, 'SimpleMatch' |% {$_.trim()}  |? {$_} } else {@('*.ini','*.db')}
 
 		$params = @{
 			include = $keep
@@ -835,9 +843,39 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 	pint-shims $destDir $info['shim'] $info['noshim'] | out-null
 }
 
-function pint-test
+function pint-test($url, $localFile)
 {
+	$client = get-web-client
+	$Global:downloadComplete = $false
 
+        $eventDataComplete = Register-ObjectEvent $client DownloadFileCompleted `
+            -SourceIdentifier WebClient.DownloadFileComplete `
+            -Action {$Global:downloadComplete = $true}
+        $eventDataProgress = Register-ObjectEvent $client DownloadProgressChanged `
+            -SourceIdentifier WebClient.DownloadProgressChanged `
+            -Action { $Global:DPCEventArgs = $EventArgs }
+
+        Write-Progress -Activity 'Downloading file' -Status $url
+        $client.DownloadFileAsync($url, $localFile)
+
+        while (!($Global:downloadComplete)) {
+            $pc = $Global:DPCEventArgs.ProgressPercentage
+            if ($pc -ne $null) {
+                Write-Progress -Activity 'Downloading file' -Status $url -PercentComplete $pc
+            }
+        }
+
+        Write-Progress -Activity 'Downloading file' -Status $url -Complete
+
+        Unregister-Event -SourceIdentifier WebClient.DownloadProgressChanged
+        Unregister-Event -SourceIdentifier WebClient.DownloadFileComplete
+        $client.Dispose()
+        $Global:downloadComplete = $null
+        $Global:DPCEventArgs = $null
+        Remove-Variable client
+        Remove-Variable eventDataComplete
+        Remove-Variable eventDataProgress
+        [GC]::Collect()
 }
 
 
@@ -1000,22 +1038,32 @@ function pint-list($detailed)
 	dir $env:PINT_APP_DIR -n -r -force -filter *.pint | % {
 		$dir = [System.IO.Path]::GetDirectoryName($_)
 		$name = [System.IO.Path]::GetFileNameWithoutExtension($_)
+		$id = ($name -split ' ', 2, 'SimpleMatch')[0]
 		$arch = if ($name.contains(' 32 ')) {32} else {64}
 		$fullpath = pint-dir $dir
 		$table += new-object –TypeName PSObject –Prop @{
+			ID = $id
 			Directory = $dir + '  '
 			Size = pint-get-folder-size $fullpath $fso
 			Version = (pint-get-version $fullpath) + $(if ($name.contains(' pinned')) {' (pinned)'})
 			Arch = $arch
 		}
 	}
-	$table | ft Directory,Version,Size,Arch -autosize
+	$table | ft Directory,ID,Version,Size,Arch -autosize
+}
+
+function get-web-client
+{
+	$client = new-object System.Net.WebClient
+	$client.Headers["User-Agent"] = $env:PINT_USER_AGENT
+#	$client.Timeout = $global:httpTimeout
+	$client
 }
 
 function pint-self-update
 {
 	write-host 'Fetching' $env:PINT_SELF_URL
-	$res = (new-object System.Net.WebClient).DownloadString($env:PINT_SELF_URL)
+	$res = (get-web-client).DownloadString($env:PINT_SELF_URL)
 	if ($res -and $res.contains('PINT - Portable INsTaller')) {
 		$res | out-file $env:PINT -encoding ascii
 		write-host 'Pint was updated to the latest version.'
@@ -1028,7 +1076,7 @@ function pint-self-update
 function pint-update
 {
 	write-host 'Updating the database...'
-	$client = new-object System.Net.WebClient;
+	$client = get-web-client;
 	$result = ''
 	cat -LiteralPath $env:PINT_SRC_FILE | % {
 		$res = $client.DownloadString($_.trim())
