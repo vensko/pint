@@ -6,8 +6,8 @@ To launch Pint, save [pint.cmd](https://github.com/vensko/pint/raw/master/pint.c
 - **packages.ini** *Pint's database file*
 - **sources.list** *databases you are subscribed to*
 - **apps** *a directory for your apps*
-- **dist** *a directory for downloaded archives and installers*
-All paths are customisable, see the "Environment Variables" chapter. 
+- **dist** *a directory for downloaded archives and installers* 
+All paths are customisable, see the "Environment Variables" chapter.  
  
 There are also hard dependencies, installed automatically, when needed:
 - [7-zip](http://www.7-zip.org/) - file archiver supporting a wide range of formats,
@@ -31,7 +31,7 @@ Downloads all files listed in *sources.list* and combines them into *packages.in
 ```
 search [<term>]
 ```
-If the &lt;term&gt; is empty, yields a full list of packages from packages.ini. 
+If the &lt;term&gt; is empty, yields a full list of packages from packages.ini.  
 If not, searches the databases for the *term*.
 ```
 download <app> [<app>]
@@ -44,16 +44,16 @@ Downloads an archive (or a few) with the given apps into *dist* and unpacks them
 ```
 installto <app> <dir> [32|64]
 ```
-Here comes is a twist. In fact, you deal with app identifiers only during their download and/or installation. After that, all commands refer to actual subdirectories in *apps*, e.g.: 
-D:\Pint\apps\**firefox** 
-D:\Pint\apps\**foobar2000** 
+Here comes is a twist. In fact, you deal with app identifiers only during their download and/or installation. After that, all commands refer to actual subdirectories in *apps*, e.g.:  
+D:\Pint\apps\**firefox**  
+D:\Pint\apps\**foobar2000**  
 To keep things simple, you may use only the *install* command. This way, database identifiers and subdirectories will always be the same. But if you prefer storing your browser in *apps\Mozilla Firefox* instead of *apps\firefox*, this can be done with the *installto* command:
 ```
 installto firefox "Mozilla Firefox"
 ```
-FF will be installed into
-*D:\Pint\apps\**Mozilla Firefox***
-From this point, it will have to be referred to as "Mozilla Firefox". 
+FF will be installed into  
+*D:\Pint\apps\**Mozilla Firefox***  
+From this point, it will have to be referred to as "Mozilla Firefox".  
 Optionally, a preferred bit count can set with the third parameter (this is useful if you need to force installation of a 32-bit version in a 64-bit system).
 ```
 list
