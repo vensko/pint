@@ -2,7 +2,7 @@
 Portable INsTaller - a manager of portable applications for Windows, which fits into a single file.
 
 # Installation
-To launch Pint, save [pint.cmd](https://github.com/vensko/pint/raw/master/pint.cmd) to a separate directory. By default, Pint will create the following items:
+To install Pint, save [pint.cmd](https://github.com/vensko/pint/raw/master/pint.cmd) to a separate directory. By default, Pint will create the following items:
 - **packages.ini** *Pint's database file*
 - **sources.list** *databases you are subscribed to*
 - **apps** *a directory for your apps*
@@ -10,7 +10,7 @@ To launch Pint, save [pint.cmd](https://github.com/vensko/pint/raw/master/pint.c
 
 All paths are customisable, see the "Environment Variables" chapter.  
   
-There are also hard dependencies, installed automatically, when needed:
+There are also the hard dependencies, installed automatically when needed:
 - [7-zip](http://www.7-zip.org/) - file archiver supporting a wide range of formats,
 - [Xidel](http://www.videlibri.de/xidel.html) - HTML/XML/JSON data extraction tool,
 - [innoextract](http://constexpr.org/innoextract/) - a tool to unpack installers created by Inno Setup.
@@ -28,16 +28,16 @@ Self-explanatory. Updates Pint to the latest version.
 ```
 pint update
 ```
-Downloads all files listed in *sources.list* and combines them into *packages.ini*. Never edit *packages.ini* manually, your changes will be lost! Create a separate *packages.user.ini* file for custom packages.
+Downloads all files listed in *sources.list* and combines them into *packages.ini*. Never edit *packages.ini* manually, your changes will be lost! Use a separate *packages.user.ini* file for custom packages.
 ```
 pint search [<term>]
 ```
 If the &lt;term&gt; is empty, yields a full list of packages from packages.ini.  
-If not, searches the databases for the *term*.
+If not, searches the database for the *term*.
 ```
 pint download <app> [<app>]
 ```
-Downloads one or more apps into the *dist* directory without unpacking them. All downloaded packages are stored with filenames in the format *&lt;app&gt;--&lt;architecture&gt;--&lt;actual-filename&gt;*.  
+Downloads one or more apps into *dist* without unpacking them. All downloaded packages are stored with filenames in the format *&lt;app&gt;--&lt;architecture&gt;--&lt;actual-filename&gt;*.  
 Keep in mind, that the architecture attribute in Pint never refers to the actual bit count, but rather to a *preferred* value. If a 64-bit version of an app is not available yet and your processor is 64-bit, a 32-bit version will be downloaded and marked as 64. With a 64-bit version released, the app will be automatically upgraded from 32 to 64 bit.
 ```
 pint install <app> [<app>]
@@ -49,7 +49,7 @@ pint installto <app> <dir> [32|64]
 Here comes is a twist. In fact, you deal with app identifiers only during their download and/or installation. After that, all commands refer to actual subdirectories in *apps*, e.g.:  
 D:\Pint\apps\\**firefox**  
 D:\Pint\apps\\**foobar2000**  
-To keep things simple, you may use only the *install* command. This way, database identifiers and subdirectories will always be the same. But if you prefer storing your browser in *apps\Mozilla Firefox* instead of *apps\firefox*, this can be done with the *installto* command:
+To keep things simple, you may use *install* only. This way, database identifiers and subdirectories will always be the same. But if you prefer storing your browser in *apps\Mozilla Firefox* instead of *apps\firefox*, this can be done with *installto*:
 ```
 pint installto firefox "Mozilla Firefox"
 ```
@@ -61,7 +61,7 @@ Optionally, a preferred bit count can set with the third parameter (useful if yo
 ```
 pint list
 ```
-Shows a full list of installed apps, where each item contains an actual directory, an identifier, a version (if available), directory size and a preferred architecture.
+Shows a full list of installed apps, where each item contains an actual directory, an identifier, a version (if available), the directory size and a preferred architecture.
 ```
 pint l
 ```
@@ -69,7 +69,7 @@ Lists only directories without retrieving metadata. If the *list* table becomes 
 ```
 pint reinstall <dir> [<dir>]
 ```
-Forces reinstallation of apps in the subdirectories.
+Forces reinstallation of the apps.
 ```
 pint remove <dir> [<dir>]
 ```
@@ -89,7 +89,7 @@ Checks for updates AND installs them if available. Same here, without parameters
 ```
 pint forget <dir> [<dir>]
 ```
-Pint never touches subdirectories, where it hadn't installed anything previously. Subdirectories with manually installed apps will simply be ignored. The *forget* command removes Pint's metadata from the subdirectories. To make them manageable again, use the *installto* command.
+Pint never touches subdirectories, where it hadn't installed anything previously. Subdirectories with manually installed apps will simply be ignored. The *forget* command removes Pint's metadata from the subdirectories. To make them manageable again, use *installto*.
 ```
 pint pin <dir> [<dir>]
 ```
@@ -97,7 +97,7 @@ Keeps Pint's metadata yet suppresses automatic updates for the apps.
 ```
 pint unpin <dir> [<dir>]
 ```
-Allows automatic updates (undoes the *pin* command).
+Allows automatic updates (undoes *pin*).
 ```
 pint subscribed
 ```
@@ -109,7 +109,7 @@ Adds the URL to the subscriptions. Basically, this has to be a direct link to an
 ```
 pint unsubscribe <url>
 ```
-Removed the URL from subscriptions.
+Removes the URL from subscriptions.
 
 # Environment Variables
 Certain parameters of Pint can be overriden with the following environment variables:
