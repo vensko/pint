@@ -1,12 +1,13 @@
 # Pint
 Portable INsTaller - a command-line manager of portable applications for Windows, which fits into a single file.  
 
-Pint is a tool for the people who prefer unpacking over installing. The primary goal was to provide a way to easily manage a collection of portable apps. With the emergence of portabilizers like [yaP](http://rolandtoth.hu/yaP/), [PortableApps.com Platform](http://portableapps.com/platform/features) and other, focusing solely on the natively portable apps became irrelevant. Pint downloads and unpacks everything it can. At the moment it supports:
+Pint is a tool for the people who prefer unpacking over installing. Its primary goal was to provide a way to easily manage a collection of portable apps. With the emergence of portabilizers like [yaP](http://rolandtoth.hu/yaP/), [PortableApps.com Platform](http://portableapps.com/platform/features) and other, focusing solely on the natively portable apps became irrelevant. Pint downloads and unpacks everything it can. At the moment it supports:
 - Zip archives (supported natively).
 - All formats supported by 7-zip (7z, RAR, NSIS installers, etc.).
 - Inno Setup installers.
-- MSI packages.
-**Pint is not a portabilizer**, though it provides ways to manage them more easily.
+- MSI packages.  
+
+**Pint is not a portabilizer**, though it provides ways to manage portable apps more easily.
 
 # Features
 - Downloads, unpacks and removes selected applications.
@@ -42,7 +43,7 @@ There are also the hard dependencies, installed automatically when needed:
 
 # Requirements
 - Powershell 2.0+
-- .NET Framework 2.0+
+- .NET Framework 2.0+  
 Both are shipped with Windows 7 by default.
 
 # Usage
