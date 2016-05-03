@@ -328,8 +328,7 @@ function pint-has($exe)
 function pint-unpack([string]$file, [string]$dir)
 {
 	if (!(test-path $file)) {
-		write-host 'Unable to find' $file
-		return
+		throw 'Unable to find $file'
 	}
 
 	if (!(test-path $dir -pathtype container)) { md $dir -ea stop | out-null }
@@ -380,9 +379,9 @@ function pint-read-ini([string]$file, [string]$term)
 	if (!(test-path $file)) { return $result }
 
 	if (!$global:ini[$file]) {
-		$stream = new-object System.IO.StreamReader($file)
-		$global:ini[$file] = $stream.readToEnd()
-		$stream.close()
+		$s = new-object System.IO.StreamReader($file)
+		$global:ini[$file] = $s.readToEnd()
+		$s.close()
 	}
 
 	$section = '[' + $term + ']'
@@ -430,7 +429,6 @@ function pint-get-app-info([string]$id, $arch)
 	$ini = merge-hashtables (pint-read-ini $env:PINT_PACKAGES_FILE $id) (pint-read-ini $env:PINT_PACKAGES_FILE_USER $id)
 
 	if (!$ini.keys.count) {
-		write-host 'Unable to find' $id 'in the database'
 		return
 	}
 
@@ -479,8 +477,7 @@ function pint-make-http-request([string]$url, $download, $disableAutoRedirect)
 				if ($res.headers['Location']) {
 					$res.close()
 					if ($maxRedirects-- -eq 0) {
-						write-host 'Exceeded limit of redirections retrieving' $url -f yellow
-						return
+						throw "Exceeded limit of redirections retrieving $url"
 					}
 					$url = $res.headers['Location']
 					continue
@@ -503,20 +500,17 @@ function pint-make-request([string]$url, $download)
 	}
 
 	if (!$res) {
-		write-host 'Failed to connect to' $url -f yellow
-		return
+		throw 'Failed to connect to $url'
 	}
 
 	if ([string]$res.ContentType -eq 'text/html') {
 		$res.close()
-		write-host $url 'responded with a HTML page.' -f yellow
-		return
+		throw "$url responded with a HTML page."
 	}
 
 	if ($res.ContentLength -lt 1) {
 		$res.close()
-		write-host 'Empty response from' $url -f yellow
-		return
+		throw "Empty response from $url"
 	}
 
 	if (!$download) { $res.close() }
@@ -584,16 +578,15 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 
 			if ($dist.contains('fosshub.com/')) {
 				$dist = $dist.replace('fosshub.com/', 'fosshub.com/genLink/').replace('.html/', '/')
-				$dist = (get-web-client).DownloadString($dist).trim()
+				$dist = (pint-wc).DownloadString($dist).trim()
 			} elseif ($info['dist'].contains('filehippo.com/')) {
 				$dist = 'http://filehippo.com' + ($dist -split '=', 2, 'SimpleMatch')[1]
 			}
 		}
+	}
 
-		if (!$dist) {
-			write-host 'Unable to extract a link from' $info['dist']
-			return
-		}
+	if (!$dist) {
+		throw "Unable to extract a link from $($info['dist'])"
 	}
 
 	$dist
@@ -621,9 +614,6 @@ function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
 	$dir = [System.IO.Path]::GetDirectoryName($targetFile)
 	if (!(test-path $dir)) { md $dir -ea stop | out-null }
 
-	pint-test $res.ResponseUri $targetFile
-	return
-
 	$totalLength = [System.Math]::Floor($res.ContentLength / 1024)
 
 	write-host "Downloading $($res.ResponseUri) ($("{0:N2} MB" -f ($totalLength / 1024)))"
@@ -631,7 +621,7 @@ function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
 	$remoteName = pint-get-remote-name $res
 	$responseStream = $res.GetResponseStream()
 	$targetStream = new-object -TypeName System.IO.FileStream -ArgumentList $targetFile, Create
-	$buffer = new-object byte[] 32KB
+	$buffer = new-object byte[] 128KB
 	$count = $responseStream.Read($buffer, 0, $buffer.length)
 	$downloaded = $count
 	$progressBar = ($res.ContentLength -gt 1MB)
@@ -665,17 +655,20 @@ function pint-get-remote-name([System.Net.WebResponse]$res)
 	($name -split '?', 2, 'SimpleMatch')[0]
 }
 
-function pint-download-app([string]$id, $arch, $res)
+function pint-download-app($id, $arch, $res)
 {
 	if (!($res -is [System.Net.WebResponse])) {
-		if (!($info = pint-get-app-info $id $arch) -or !($url = pint-get-dist-link $info $true) -or !($res = pint-make-request $url $true)) {
-			return
+		if (!($info = pint-get-app-info $id $arch) -or !($url = pint-get-dist-link $info $true)) {
+			throw "Unable to find $id in the database."
 		}
+		$arch = $info['arch']
+		$res = pint-make-request $url $true
 	}
 
+	if (!$arch) { $arch = get-arch }
 	$name = pint-get-remote-name $res
 
-	$file = join-path $env:PINT_DIST_DIR "$id--$($info['arch'])--$name"
+	$file = join-path $env:PINT_DIST_DIR "$id--$arch--$name"
 
 	if (test-path $file) {
 		if ((new-object System.IO.FileInfo($file)).length -eq $res.ContentLength) {
@@ -711,15 +704,6 @@ function pint-dir-empty([string]$path)
 	!(dir (pint-dir $path) -name -force -ea 0)
 }
 
-function pint-dir-upgradable([string]$path)
-{
-	if ([bool](dir (pint-dir $path) -n -force -ea 0 -filter *pinned*.pint)) {
-		write-host $path 'is pinned, use unpin to allow this action.'
-		return
-	}
-	$true
-}
-
 function pint-dir-tracked([string]$path)
 {
 	[bool](dir (pint-dir $path) -n -force -ea 0 -filter *.pint)
@@ -735,7 +719,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 	$destDir = pint-dir $destDir
 
 	if (!($info = pint-get-app $destDir) -and !($info = pint-get-app-info $id)) {
-		throw [System.IO.FileNotFoundException] "Unable to find $id in the database."
+		throw "Unable to find $id in the database."
 	}
 
 	if (!(test-path $destDir -pathtype container)) { md $destDir -ea stop | out-null }
@@ -858,7 +842,9 @@ function pint-reinstall
 
 	$args | % {
 		try {
-			if (!(pint-dir-upgradable $_)) { return }
+			if ([bool](dir (pint-dir $_) -n -force -ea 0 -filter *pinned*.pint)) {
+				throw "$_ is pinned, use unpin to allow this action."
+			}
 
 			if ($app = pint-get-app $_) {
 				pint-force-install $app['id'] $app['dir'] $app['arch']
@@ -924,7 +910,7 @@ function pint-remove
 			rd -literalpath $dir -recurse -force
 			write-host $_ 'is removed.'
 		} else {
-			write-host "$_ is not installed."
+			write-host $_ 'is not installed.'
 		}
 	}
 }
@@ -948,7 +934,6 @@ function pint-outdated
 
 		try {
 			$app = pint-get-app $_
-
 			if (!$app) { write-host 'NOT FOUND' -f red; return }
 			if (!$app['size']) { write-host 'NO SIZE DATA' -f darkyellow; return }
 
@@ -1011,7 +996,7 @@ function pint-list($detailed)
 		$id = ($name -split ' ', 2, 'SimpleMatch')[0]
 		$arch = if ($name.contains(' 32 ')) {32} else {64}
 		$fullpath = pint-dir $dir
-		$table += new-object �TypeName PSObject �Prop @{
+		$table += new-object -TypeName PSObject -Prop @{
 			ID = $id
 			Directory = $dir + '  '
 			Size = pint-get-folder-size $fullpath $fso
@@ -1022,7 +1007,7 @@ function pint-list($detailed)
 	$table | ft Directory,ID,Version,Size,Arch -autosize
 }
 
-function get-web-client
+function pint-wc
 {
 	$client = new-object System.Net.WebClient
 	$client.Headers["User-Agent"] = $env:PINT_USER_AGENT
@@ -1033,7 +1018,7 @@ function get-web-client
 function pint-self-update
 {
 	write-host 'Fetching' $env:PINT_SELF_URL
-	$res = (get-web-client).DownloadString($env:PINT_SELF_URL)
+	$res = (pint-wc).DownloadString($env:PINT_SELF_URL)
 	if ($res -and $res.contains('PINT - Portable INsTaller')) {
 		$res | out-file $env:PINT -encoding ascii
 		write-host 'Pint was updated to the latest version.'
@@ -1046,10 +1031,11 @@ function pint-self-update
 function pint-update
 {
 	write-host 'Updating the database...'
-	$client = get-web-client;
+	$client = pint-wc
 	$result = ''
-	cat -LiteralPath $env:PINT_SRC_FILE | % {
-		$res = $client.DownloadString($_.trim())
+	[IO.File]::ReadAllLines($env:PINT_SRC_FILE) |% {
+		if (!($_ = $_.trim()) -or $_[0] -eq ';') { return }
+		$res = $client.DownloadString($_)
 		if ($res) {
 			write-host 'Fetched' $_
 			$result += $res
@@ -1058,6 +1044,7 @@ function pint-update
 		}
 	}
 	$result | out-file $env:PINT_PACKAGES_FILE -encoding ascii
+	write-host 'Done.'
 }
 
 function pint-start($cmd)

@@ -34,7 +34,7 @@ To install Pint, save [pint.cmd](https://github.com/vensko/pint/raw/master/pint.
 - **apps** *a directory for your apps*
 - **dist** *a directory for downloaded archives and installers*  
 
-All paths are customisable, see the "Environment Variables" chapter.  
+All paths are customisable, see the "Environment variables" chapter.  
   
 There are also the hard dependencies, installed automatically when needed:
 - [7-zip](http://www.7-zip.org/) - file archiver supporting a wide range of formats,
@@ -157,7 +157,7 @@ pint installto winrar WinRAR\x64 64
 Pint will handle handle both copies and update them using a correct archive.  
 As can be seen via the *list* command, they'll be referred to as WinRAR\x86 and WinRAR\x64 respectively.
 
-# Environment Variables
+# Environment variables
 Certain parameters of Pint can be overriden with the following environment variables. All paths must include names, therefore they can be renamed as well.
  - **PINT_APP_DIR** - absolute path to the *apps* directory.
  - **PINT_DIST_DIR** - absolute path to the *dist* directory.
