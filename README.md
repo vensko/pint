@@ -1,5 +1,30 @@
 # Pint
-Portable INsTaller - a manager of portable applications for Windows, which fits into a single file.
+Portable INsTaller - a command-line manager of portable applications for Windows, which fits into a single file.  
+
+Pint is a tool for the people who prefer unpacking over installing. The primary goal was to provide a way to easily manage a collection of portable apps. With the emergence of portabilizers like [yaP](http://rolandtoth.hu/yaP/), [PortableApps.com Platform](http://portableapps.com/platform/features) and other, focusing solely on the natively portable apps became irrelevant. Pint downloads and unpacks everything it can. At the moment it supports:
+- Zip archives (supported natively).
+- All formats supported by 7-zip (7z, RAR, NSIS installers, etc.).
+- Inno Setup installers.
+- MSI packages.
+**Pint is not a portabilizer**, though it provides ways to manage them more easily.
+
+# Features
+- Downloads, unpacks and removes selected applications.
+- Checks for updates and downloads them if available.
+- Extracts downloads links from websites using [Xidel](http://www.videlibri.de/xidel.html).
+- Supports RSS and PAD files as link sources, has predefined rules for FileHippo, PortableApps.com and FossHub.
+- Unpacks various types of archives and installers and upgrades apps using predefined rules from the database.
+- Apps can be installed into an arbitrary subdirectory under *apps*. This allows to keep yaP and PortableApps.com packages up to date.
+- Automatically detects console applications and creates batch redirects for them in the apps directory.
+- Can remember, if a 32-bit or a 64-bit application was installed.
+- Detects app versions.
+- Forms a report with all installed applications.
+- Can temporarily suppress updates for selected apps.
+- Can update itself.
+- Provides a way to subscribe to multiple remote databases, even choose not to use the default one.
+- Is able to search across all subscribed databases.
+- Allows to keep a custom user database in a separate file (by default, packages.user.ini).
+- Allows to override paths and settings via environment variables.
 
 # Installation
 To install Pint, save [pint.cmd](https://github.com/vensko/pint/raw/master/pint.cmd) to a separate directory. By default, Pint will create the following items:
@@ -14,6 +39,11 @@ There are also the hard dependencies, installed automatically when needed:
 - [7-zip](http://www.7-zip.org/) - file archiver supporting a wide range of formats,
 - [Xidel](http://www.videlibri.de/xidel.html) - HTML/XML/JSON data extraction tool,
 - [innoextract](http://constexpr.org/innoextract/) - a tool to unpack installers created by Inno Setup.
+
+# Requirements
+- Powershell 2.0+
+- .NET Framework 2.0+
+Both are shipped with Windows 7 by default.
 
 # Usage
 ```
