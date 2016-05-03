@@ -144,7 +144,7 @@ FF will be installed into
 D:\Pint\apps\\**Mozilla Firefox**  
 From this point, it will have to be referred to as "Mozilla Firefox".  
 
-Consider an yaP setup with the following directory structure:
+For another example, consider a yaP setup with the directory structure:
 - apps\WinRAR\WinRARPortable.exe (yaP executable)
 - apps\WinRAR\x86\
 - apps\WinRAR\x64\  
