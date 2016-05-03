@@ -229,7 +229,7 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, $delete)
 			$subsystem = $null
 			try {
 				$fs = [IO.File]::OpenRead($relpath)
-				$br = New-Object IO.BinaryReader($fs)
+				$br = new-object IO.BinaryReader($fs)
 				if ($br.ReadUInt16() -ne 23117) { return }
 				$fs.Position = 0x3C
 				$fs.Position = $br.ReadUInt32()
@@ -328,7 +328,7 @@ function pint-has($exe)
 function pint-unpack([string]$file, [string]$dir)
 {
 	if (!(test-path $file)) {
-		throw 'Unable to find $file'
+		throw "Unable to find $file"
 	}
 
 	if (!(test-path $dir -pathtype container)) { md $dir -ea stop | out-null }
@@ -500,7 +500,7 @@ function pint-make-request([string]$url, $download)
 	}
 
 	if (!$res) {
-		throw 'Failed to connect to $url'
+		throw "Failed to connect to $url"
 	}
 
 	if ([string]$res.ContentType -eq 'text/html') {
