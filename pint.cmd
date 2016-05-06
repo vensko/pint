@@ -354,7 +354,7 @@ function pint-unpack([string]$file, [string]$dir)
 		default {
 			if (($_ -eq '.exe') -and (& $env:FINDSTR /m /c:"Inno Setup" $file)) {
 				if (!(pint-has 'innoextract')) {
-					write-host "Pint needs innoextract to unpack $filename, installing automatically..."
+					write-host "Pint needs innoextract to unpack $filename, installing automatically..." -f white
 					pint-reinstall @('innoextract')
 				}
 				& innoextract -s -c -p -d $dir $fullPath
@@ -362,7 +362,7 @@ function pint-unpack([string]$file, [string]$dir)
 			}
 
 			if (!(pint-has '7z')) {
-				write-host "Pint needs 7-zip to unpack $filename, installing automatically..."
+				write-host "Pint needs 7-zip to unpack $filename, installing automatically..." -f white
 				pint-reinstall @('7-zip')
 			}
 
@@ -544,7 +544,7 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 
 	if ($link) {
 		if (!(pint-has 'xidel')) {
-			write-host "Pint needs Xidel to be able to extract links, installing automatically..."
+			write-host "Pint needs Xidel to be able to extract links, installing automatically..." -f white
 			pint-reinstall @('xidel')
 		}
 
@@ -799,7 +799,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 			$xf = $info['xf'] + ' *.pint $R0'
 			$xd = $info['xd'] + ' $0 $PLUGINSDIR $TEMP'
 
-			& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /E /PURGE /NJS /NJH /NFL /NDL /NC /NP /NS /R:2 /W:2 /XO /FFT /XF $xf /XD $xd"
+			& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /E /PURGE /NJS /NJH /NFL /NDL /NC /NP /NS /R:2 /W:2 /XO /FFT /XF $xf /XD $xd" | out-null
 
 			if ($lastexitcode -gt 7) {
 				write-host "Detected errors while copying from $pwd with Robocopy ($lastexitcode)."
@@ -1011,7 +1011,6 @@ function pint-wc
 {
 	$client = new-object System.Net.WebClient
 	$client.Headers["User-Agent"] = $env:PINT_USER_AGENT
-#	$client.Timeout = $global:httpTimeout
 	$client
 }
 
@@ -1032,15 +1031,16 @@ function pint-update
 {
 	write-host 'Updating the database...'
 	$client = pint-wc
+
 	$result = ''
 	[IO.File]::ReadAllLines($env:PINT_SRC_FILE) |% {
 		if (!($_ = $_.trim()) -or $_[0] -eq ';') { return }
-		$res = $client.DownloadString($_)
-		if ($res) {
-			write-host 'Fetched' $_
+		write-host $_ -nonewline
+		if ($res = $client.DownloadString($_)) {
+			write-host "`r$_" -f green
 			$result += $res
 		} else {
-			write-host 'Failed to fetch' $_
+			write-host "`r$_" -f red
 		}
 	}
 	$result | out-file $env:PINT_PACKAGES_FILE -encoding ascii
