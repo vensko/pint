@@ -122,11 +122,11 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, $delete)
 			if ($subsystem -ne 3) { return }
 		}
 
-		$baseName = [System.IO.Path]::GetFileNameWithoutExtension($_)
+		$baseName = basename $_
 		$batch = pint-dir "$baseName.bat"
 
 		if ($delete) {
-			if (test-path $batch) {
+			if (is-file $batch) {
 				del $batch
 				write-host "Removed $baseName.bat"
 			}
@@ -155,9 +155,9 @@ function merge-hashtables
 function pint-get-app([string]$p)
 {
 	$p = pint-dir $p
-	if (test-path $p -pathtype leaf) {
+	if (is-file $p) {
 		$f = $p
-		$dir = [System.IO.Path]::GetDirectoryName($f)
+		$dir = dirname $f
 	} else {
 		$f = dir (join-path $p '*.pint') -n -force -ea 0 | select -first 1
 		if (!$f) { return }
@@ -165,7 +165,7 @@ function pint-get-app([string]$p)
 		$dir = $p
 	}
 
-	$a = [System.IO.Path]::GetFileNameWithoutExtension($f).trim() -split ' ', $null, 'SimpleMatch'
+	$a = (basename $f).trim() -split ' ', $null, 'SimpleMatch'
 
 	$app = @{
 		id = $a[0]
@@ -198,23 +198,23 @@ function pint-get-app([string]$p)
 
 function pint-has($exe)
 {
-	test-path (pint-dir "$exe.bat") -pathtype leaf
+	is-file (pint-dir "$exe.bat")
 }
 
 function pint-unpack([string]$file, [string]$dir)
 {
-	if (!(test-path $file)) {
+	if (!(is-file $file)) {
 		throw "Unable to find $file"
 	}
 
-	if (!(test-path $dir -pathtype container)) { md $dir -ea stop | out-null }
+	ensure-dir $dir
 
 	$filename = [System.IO.Path]::GetFileName($file)
 
 	write-host 'Unpacking' $filename
 
 	$fullPath = [System.IO.Path]::GetFullPath($file)
-	$sevenzip = (test-path (pint-dir '7z.bat'))
+	$sevenzip = (is-file (pint-dir '7z.bat'))
 
 	switch ([System.IO.Path]::GetExtension($file)) {
 		".msi" {
@@ -252,7 +252,7 @@ function pint-unpack([string]$file, [string]$dir)
 function pint-read-ini([string]$file, [string]$term)
 {
 	$result = @{}
-	if (!(test-path $file)) { return $result }
+	if (!(is-file $file)) { return $result }
 
 	if (!$global:ini[$file]) {
 		$s = new-object System.IO.StreamReader($file)
@@ -282,7 +282,7 @@ function pint-read-ini([string]$file, [string]$term)
 function pint-get-version([string]$dir)
 {
 	try {
-		$v = (dir $dir -recurse -filter *.exe -ea stop | sort -property length -descending | select -first 1).VersionInfo.ProductVersion.trim()
+		$v = (dir $dir -r -filter *.exe -ea stop | sort -property length -descending | select -first 1).VersionInfo.ProductVersion.trim()
 		if ($v.contains(',')) { $v = $v.replace(',', '.') }
 		if ($v.contains('-')) { $v = ($v -split '-', 2, 'SimpleMatch')[0] }
 		if (!($v -match "^[0-9\.]+$")) { return }
@@ -477,16 +477,9 @@ function pint-is-app-outdated([Hashtable]$app, $download)
 	}
 }
 
-function pint-get-folder-size([string]$path, $fso)
-{
-    if (!$fso) { $fso = new-object -com Scripting.FileSystemObject }
-    ('{0:N2} MB' -f (($fso.GetFolder($path).Size) / 1MB))
-}
-
 function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
 {
-	$dir = [System.IO.Path]::GetDirectoryName($targetFile)
-	if (!(test-path $dir)) { md $dir -ea stop | out-null }
+	ensure-dir (dirname $targetFile)
 
 	$totalLength = [System.Math]::Floor($res.ContentLength / 1024)
 
@@ -544,7 +537,7 @@ function pint-download-app($id, $arch, $res)
 
 	$file = join-path $env:PINT_DIST_DIR "$id--$arch--$name"
 
-	if (test-path $file) {
+	if (is-file $file) {
 		if ((new-object System.IO.FileInfo($file)).length -eq $res.ContentLength) {
 			$res.close()
 			write-host 'The local file has the same size as the remote one, skipping redownloading.'
@@ -585,7 +578,7 @@ function pint-dir-tracked([string]$path)
 
 function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 {
-	if (!(test-path $file)) {
+	if (!(is-file $file)) {
 		throw [System.IO.FileNotFoundException] "Unable to find $file"
 	}
 
@@ -596,7 +589,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 		throw "Unable to find $id in the database."
 	}
 
-	if (!(test-path $destDir -pathtype container)) { md $destDir -ea stop | out-null }
+	ensure-dir $destDir
 
 	write-host 'Installing' $id 'to' $destDir
 
@@ -604,14 +597,14 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 		copy -LiteralPath $file (join-path $destDir "$id.exe") -force
 	} else {
 		$tempDir = join-path $env:TEMP "pint-$id-$(get-random)"
-		md $tempDir -ea stop | out-null
+		ensure-dir $tempDir
 
 		pint-unpack $file $tempDir | out-null
 
 		cd $tempDir
 
 		if ($tempDir -ne $pwd) {
-			throw [System.IO.FileNotFoundException] "Unable to use the temporary directory $tempDir"
+			throw "Unable to use the temporary directory $tempDir"
 		}
 
 		$base = if ($info['base']) {$info['base']} else {'.exe'}
@@ -635,12 +628,11 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 
 		dir $destDir @params | % {
 			$p = join-path $destDir $_
-			if (test-path $p -pathtype container) {
-				if (!(test-path "$pwd\$_")) { md "$pwd\$_" | out-null }
+			if (is-dir $p) {
+				ensure-dir "$pwd\$_"
 				copy "$p\*" "$pwd\$_" -recurse -force
 			} else {
-				$dir = [System.IO.Path]::GetDirectoryName("$pwd\$_")
-				if (!(test-path $dir)) { md $dir | out-null }
+				ensure-dir (dirname "$pwd\$_")
 				copy $p "$pwd\$_" -force
 			}
 		}
@@ -660,12 +652,11 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 
 			dir $pwd @params | % {
 				$p = join-path $pwd $_
-				if (test-path $p -pathtype container) {
-					if (!(test-path "$destDir\$_")) { md "$destDir\$_" | out-null }
+				if (is-dir $p) {
+					ensure-dir "$destDir\$_"
 					copy "$p\*" "$destDir\$_" -recurse -force
 				} else {
-					$dir = [System.IO.Path]::GetDirectoryName("$destDir\$_")
-					if (!(test-path $dir)) { md $dir | out-null }
+					ensure-dir (dirname "$destDir\$_")
 					copy $p "$destDir\$_" -force
 				}
 			}
@@ -701,14 +692,50 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 	pint-shims $destDir $info['shim'] $info['noshim'] | out-null
 }
 
-function pint-test()
+function max-length($array)
 {
-
+	$max = 0
+	$array | % { if ($_.length -gt $max) { $max = $_.length } }
+	$max
 }
 
+function pint-src-file
+{
+	if (!(pint-exists $env:PINT_SRC_FILE)) {
+		$env:PINT_PACKAGES | out-file $env:PINT_SRC_FILE -encoding ascii
+	}
+	$env:PINT_SRC_FILE
+}
+
+function pint-db-file
+{
+	if (!(pint-exists $env:PINT_PACKAGES_FILE)) { pint-update }
+	$env:PINT_PACKAGES_FILE
+}
+
+function pint-wc
+{
+	$client = new-object System.Net.WebClient
+	$client.Headers["User-Agent"] = $env:PINT_USER_AGENT
+	$client
+}
+
+function is-file($p)
+{
+	test-path $p -pathtype leaf
+}
+
+function is-dir($p)
+{
+	test-path $p -pathtype container
+}
+
+function ensure-dir($p)
+{
+	if (!(is-dir $p)) { md $p -ea stop | out-null }
+}
 
 ############## Controllers
-
 
 function pint-reinstall
 {
@@ -777,7 +804,7 @@ function pint-remove
 	$args | % {
 		$dir = pint-dir $_
 
-		if (test-path $dir) {
+		if (is-dir $dir) {
 			write-host "Uninstalling $_..."
 			$app = pint-get-app $_
 			if ($app) { pint-shims $dir $app['shim'] $app['noshim'] 'delete' }
@@ -787,13 +814,6 @@ function pint-remove
 			write-host $_ 'is not installed.'
 		}
 	}
-}
-
-function max-length($array)
-{
-	$max = 0
-	$array | % { if ($_.length -gt $max) { $max = $_.length } }
-	$max
 }
 
 function pint-outdated
@@ -857,7 +877,7 @@ function pint-upgrade
 
 function pint-l
 {
-	dir $env:PINT_APP_DIR -n -r -force -filter *.pint | % { [System.IO.Path]::GetDirectoryName($_) }
+	dir $env:PINT_APP_DIR -n -r -force -filter *.pint | % { dirname $_ }
 }
 
 function pint-list($detailed)
@@ -865,27 +885,20 @@ function pint-list($detailed)
 	$table = @()
 	$fso = new-object -com Scripting.FileSystemObject
 	dir $env:PINT_APP_DIR -n -r -force -filter *.pint | % {
-		$dir = [System.IO.Path]::GetDirectoryName($_)
-		$name = [System.IO.Path]::GetFileNameWithoutExtension($_)
+		$dir = dirname $_
+		$name = basename $_
 		$id = ($name -split ' ', 2, 'SimpleMatch')[0]
 		$arch = if ($name.contains(' 32 ')) {32} else {64}
 		$fullpath = pint-dir $dir
 		$table += new-object -TypeName PSObject -Prop @{
 			ID = $id
 			Directory = $dir + '  '
-			Size = pint-get-folder-size $fullpath $fso
+			Size = '{0:N2} MB' -f (($fso.GetFolder($fullpath).Size) / 1MB)
 			Version = (pint-get-version $fullpath) + $(if ($name.contains(' pinned')) {' (pinned)'})
 			Arch = $arch
 		}
 	}
 	$table | ft Directory,ID,Version,Size,Arch -autosize
-}
-
-function pint-wc
-{
-	$client = new-object System.Net.WebClient
-	$client.Headers["User-Agent"] = $env:PINT_USER_AGENT
-	$client
 }
 
 function pint-self-update
@@ -962,33 +975,18 @@ function pint-forget
 
 function pint-exists($file)
 {
-	((test-path $file) -and (new-object System.IO.FileInfo($file)).length -ne 0)
-}
-
-function pint-src-file
-{
-	if (!(pint-exists $env:PINT_SRC_FILE)) {
-		$env:PINT_PACKAGES | out-file $env:PINT_SRC_FILE -encoding ascii
-	}
-	$env:PINT_SRC_FILE
-}
-
-function pint-db-file
-{
-	if (!(pint-exists $env:PINT_PACKAGES_FILE)) { pint-update }
-	$env:PINT_PACKAGES_FILE
+	((is-file $file) -and (new-object System.IO.FileInfo($file)).length -ne 0)
 }
 
 function pint-update
 {
 	write-host 'Updating the database...'
-	$client = pint-wc
-
+	$wc = pint-wc
 	$result = ''
 	[IO.File]::ReadAllLines((pint-src-file)) |% {
 		if (!($_ = $_.trim()) -or $_[0] -eq ';') { return }
 		write-host $_ -nonewline
-		if ($res = $client.DownloadString($_)) {
+		if ($res = $wc.DownloadString($_)) {
 			write-host "`r$_" -f green
 			$result += $res.trim()
 		} else {
@@ -997,6 +995,16 @@ function pint-update
 	}
 	$result | out-file $env:PINT_PACKAGES_FILE -encoding ascii
 	write-host 'Done.'
+}
+
+function basename($f)
+{
+	[System.IO.Path]::GetFileNameWithoutExtension($f)
+}
+
+function dirname($f)
+{
+	[System.IO.Path]::GetDirectoryName($f)
 }
 
 function pint-pin
@@ -1014,7 +1022,7 @@ function pint-pin
 			$p = 'un'
 		}
 		$files |% {
-			$n = [System.IO.Path]::GetFileNameWithoutExtension($_).replace(' pinned', '') + $s
+			$n = (basename $_).replace(' pinned', '') + $s
 			ren (join-path $dir $_) "$n.pint" -force
 			write-host $app ('is '+$p+'pinned.')
 		}
@@ -1032,7 +1040,7 @@ function pint-search($term)
 	$term = if ($term) {"\s*\[.*$term.*\]"} else {"\s*\["}
 
 	$result = @()
-	if (test-path $env:PINT_PACKAGES_FILE_USER) {
+	if (is-file $env:PINT_PACKAGES_FILE_USER) {
 		$result += (& $env:FINDSTR /I /B /R $term $env:PINT_PACKAGES_FILE_USER | sort)
 	}
 	$result += (& $env:FINDSTR /I /B /R $term (pint-db-file) | sort)
