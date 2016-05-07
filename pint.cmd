@@ -10,7 +10,7 @@ SET "PINT=%~f0"
 rem Set variables if they weren't overriden earlier
 if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0dist"
 if not defined PINT_APP_DIR set "PINT_APP_DIR=%~dp0apps"
-if not defined PINT_SHIM_DIR set "PINT_SHIM_DIR=%PINT_APP_DIR%\..\shims"
+if not defined PINT_SHIM_DIR set "PINT_SHIM_DIR=%PINT_APP_DIR%\.shims"
 if not defined PINT_PACKAGES_FILE set "PINT_PACKAGES_FILE=%~dp0packages.ini"
 if not defined PINT_PACKAGES_FILE_USER set "PINT_PACKAGES_FILE_USER=%~dp0packages.user.ini"
 if not defined PINT_SRC_FILE set "PINT_SRC_FILE=%~dp0sources.list"
