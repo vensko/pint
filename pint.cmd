@@ -17,12 +17,8 @@ if not defined PINT_TEMP_FILE set "PINT_TEMP_FILE=%TEMP%\pint.tmp"
 if not defined PINT_USER_AGENT set "PINT_USER_AGENT=PintBot/1.0 (+https://github.com/vensko/pint)"
 
 SET "FINDSTR=%WINDIR%\system32\findstr.exe"
-SET "FIND=%WINDIR%\system32\find.exe"
-SET "SORT=%WINDIR%\system32\sort.exe"
-SET "FORFILES=%WINDIR%\system32\forfiles.exe"
 SET "MSIEXEC=%WINDIR%\system32\msiexec.exe"
 SET "ROBOCOPY=%WINDIR%\system32\robocopy.exe"
-SET "POWERSHELL=powershell -NoLogo -NoProfile -executionpolicy bypass"
 
 path %PINT_APP_DIR%;%PATH%
 
@@ -30,130 +26,10 @@ rem Hardcoded URLs
 set "PINT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini"
 set "PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.bat"
 
-rem Functions accessible directly from the command line
-SET BATCH=search subscribed subscribe unsubscribe pin unpin forget
-
-for %%x in (%BATCH%) do (
-	if "%~1"=="%%x" (
-		call :%* || exit /b 1
-		exit /b 0
-	)
-)
-
 set "_args=%*"
 if defined _args set "_args=%_args:"=""""""%"
-%POWERSHELL% "$s = ${%PINT%} | out-string; $s += """pint-start %_args%"""; iex($s)" || exit /b 1
+powershell -NoLogo -NoProfile -executionpolicy bypass "$s = ${%PINT%} | out-string; $s += """pint-start %_args%"""; iex($s)" || exit /b 1
 exit /b 0
-
-
-rem *****************************************
-rem  FUNCTIONS
-rem *****************************************
-
-
-:search
-	if not exist "%PINT_PACKAGES_FILE%" call "%PINT%" update
-
-	if exist "%PINT_PACKAGES_FILE_USER%" (
-		"%FINDSTR%" /I /B /R "\s*\[.*%~1.*\]" "%PINT_PACKAGES_FILE_USER%" | "%SORT%"
-	)
-	"%FINDSTR%" /I /B /R "\s*\[.*%~1.*\]" "%PINT_PACKAGES_FILE%" | "%SORT%"
-	exit /b
-
-
-:subscribed
-	type "%PINT_SRC_FILE%" || exit /b 1
-	exit /b 0
-
-
-:subscribe
-	if "%~1"=="" (
-		echo Enter an URL!
-		exit /b 1
-	)
-
-	>nul "%FINDSTR%" /L /X "%~1" "%PINT_SRC_FILE%" && (
-		echo This URL is already registered.
-		exit /b 1
-	)
-
-	>"%PINT_TEMP_FILE%" echo %~1
-	>>"%PINT_TEMP_FILE%" type "%PINT_SRC_FILE%"
-	>nul move /Y "%PINT_TEMP_FILE%" "%PINT_SRC_FILE%"
-
-	echo Registered %~1
-	echo.
-	echo Your new source list:
-	call :subscribed
-
-	exit /b 0
-
-
-:unsubscribe
-	if "%~1"=="" (
-		echo Enter an URL!
-		exit /b 1
-	)
-
-	>nul "%FINDSTR%" /L /X "%~1" "%PINT_SRC_FILE%" || (
-		echo This URL is not registered.
-		exit /b 1
-	)
-
-	>"%PINT_TEMP_FILE%" "%FINDSTR%" /X /L /V "%~1" "%PINT_SRC_FILE%"
-	>nul move /Y "%PINT_TEMP_FILE%" "%PINT_SRC_FILE%"
-
-	echo Unregistered %~1
-	echo.
-	echo Your new source list:
-	call :subscribed
-
-	exit /b
-
-
-:pin
-	@setlocal enabledelayedexpansion
-	if not "%~2"=="" (
-		for %%x in (%*) do call :pin "%%~x"
-		exit /b 0
-	)
-	if not exist "%PINT_APP_DIR%\%~1\*.pint" (
-		echo %~1 is not tracked by Pint, try to reinstall it.
-		exit /b 1
-	)
-	for /f "usebackq delims=" %%s in (`dir /b /ah "%PINT_APP_DIR%\%~1\*.pint"`) do (
-		set "_file=%%~ns"
-		if defined _unpin (
-			set "_file=!_file: pinned=!"
-			echo %~1 is unpinned.
-		) else (
-			set "_file=!_file: pinned=! pinned"
-			echo %~1 is pinned.
-		)
-		ren "%PINT_APP_DIR%\%~1\%%s" "!_file!.pint"
-	)
-	exit /b
-
-
-:unpin
-	set "_unpin=1"
-	call :pin %*
-	exit /b
-
-
-:forget
-	if "%~1"=="" (
-		echo Choose a path!
-		exit /b 1
-	)
-	if not "%~2"=="" (
-		for %%x in (%*) do call :forget "%%~x"
-		exit /b 0
-	)
-	2>nul del /Q /S /AH "%PINT_APP_DIR%\%~1\*.pint"
-	echo %~1 is no longer managed by Pint.
-	exit /b
-
 
 goto :eof
 
@@ -424,9 +300,7 @@ function pint-get-app-info([string]$id, $arch)
 {
 	if (!$arch) { $arch = get-arch }
 
-	if (!(test-path $env:PINT_PACKAGES_FILE)) { pint-update }
-
-	$ini = merge-hashtables (pint-read-ini $env:PINT_PACKAGES_FILE $id) (pint-read-ini $env:PINT_PACKAGES_FILE_USER $id)
+	$ini = merge-hashtables (pint-read-ini (pint-db-file) $id) (pint-read-ini $env:PINT_PACKAGES_FILE_USER $id)
 
 	if (!$ini.keys.count) {
 		return
@@ -1027,24 +901,147 @@ function pint-self-update
 	}
 }
 
+function pint-subscribe($url)
+{
+	if (!$url) {
+		write-host 'Set an URL to subscribe to.' -f red; return
+	}
+
+	$url = $url.trim()
+	$srcFile = pint-src-file
+	$list = [IO.File]::ReadAllLines($srcFile)
+
+	if ($list -contains $url) {
+		write-host 'This URL is already registered.' -f red; return
+	} elseif (!$url.StartsWith('http://') -and !$url.StartsWith('https://')) {
+		write-host 'Incorrect URL.' -f red; return
+	}
+
+	@($url) + $list | out-file $srcFile -en ascii
+
+	write-host 'Registered' $url
+	write-host "`nYour new source list:"
+	pint-subscribed
+}
+
+function pint-unsubscribe($url)
+{
+	if (!$url) {
+		write-host 'Set an URL to unsubscribe from.' -f red; return
+	}
+
+	$url = $url.trim()
+	$srcFile = pint-src-file
+	$list = [System.Collections.ArrayList]([IO.File]::ReadAllLines($srcFile))
+
+	if (!($list -contains $url)) {
+		write-host 'This URL is not registered.' -f red; return
+	}
+
+	$list.Remove($url)
+
+	$list | out-file $srcFile -en ascii
+
+	write-host 'Unregistered' $url
+	write-host "`nYour new source list:"
+	pint-subscribed
+}
+
+function pint-subscribed
+{
+	write-host ([IO.File]::ReadAllText((pint-src-file)).trim())
+}
+
+function pint-forget
+{
+	$args | % {
+		del (join-path (pint-dir $_) '*.pint') -force -ea 0
+		write-host $_ 'is no longer managed by Pint.'
+	}
+}
+
+function pint-exists($file)
+{
+	((test-path $file) -and (new-object System.IO.FileInfo($file)).length -ne 0)
+}
+
+function pint-src-file
+{
+	if (!(pint-exists $env:PINT_SRC_FILE)) {
+		$env:PINT_PACKAGES | out-file $env:PINT_SRC_FILE -encoding ascii
+	}
+	$env:PINT_SRC_FILE
+}
+
+function pint-db-file
+{
+	if (!(pint-exists $env:PINT_PACKAGES_FILE)) { pint-update }
+	$env:PINT_PACKAGES_FILE
+}
+
 function pint-update
 {
 	write-host 'Updating the database...'
 	$client = pint-wc
 
 	$result = ''
-	[IO.File]::ReadAllLines($env:PINT_SRC_FILE) |% {
+	[IO.File]::ReadAllLines((pint-src-file)) |% {
 		if (!($_ = $_.trim()) -or $_[0] -eq ';') { return }
 		write-host $_ -nonewline
 		if ($res = $client.DownloadString($_)) {
 			write-host "`r$_" -f green
-			$result += $res
+			$result += $res.trim()
 		} else {
 			write-host "`r$_" -f red
 		}
 	}
 	$result | out-file $env:PINT_PACKAGES_FILE -encoding ascii
 	write-host 'Done.'
+}
+
+function pint-pin
+{
+	$args |% {
+		$app = $_
+		$dir = pint-dir $_
+		if (!($files = dir $dir -ea 0 -n -force -filter *.pint)) {
+			write-host $_ 'is not managed by Pint, try to reinstall it.' -f yellow; return
+		}
+		$s = ' pinned'
+		$p = ''
+		if ($env:PINT_UNPIN) {
+			$s = ''
+			$p = 'un'
+		}
+		$files |% {
+			$n = [System.IO.Path]::GetFileNameWithoutExtension($_).replace(' pinned', '') + $s
+			ren (join-path $dir $_) "$n.pint" -force
+			write-host $app ('is '+$p+'pinned.')
+		}
+	}
+}
+
+function pint-unpin
+{
+	$env:PINT_UNPIN = $true
+	pint-pin @args
+}
+
+function pint-search($term)
+{
+	$term = if ($term) {"\s*\[.*$term.*\]"} else {"\s*\["}
+
+	$result = @()
+	if (test-path $env:PINT_PACKAGES_FILE_USER) {
+		$result += (& $env:FINDSTR /I /B /R $term $env:PINT_PACKAGES_FILE_USER | sort)
+	}
+	$result += (& $env:FINDSTR /I /B /R $term (pint-db-file) | sort)
+
+	if (!$result.count) {
+		write-host 'Nothing found.'
+	} else {
+		write-host ($result -join "`n").replace('[', '').replace(']', '')
+	}
 }
 
 function pint-start($cmd)
