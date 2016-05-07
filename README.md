@@ -36,6 +36,7 @@ To install Pint, save [pint.cmd](https://github.com/vensko/pint/raw/master/pint.
 - **sources.list** *databases you are subscribed to*
 - **apps** *a directory for your apps*
 - **dist** *a directory for downloaded archives and installers*  
+- **shims** *a directory for shims*  
 
 All paths are customisable, see the "Environment variables" chapter.  
   
@@ -169,6 +170,7 @@ As can be seen via the *list* command, they'll be referred to as WinRAR\x86 and 
 Certain parameters of Pint can be overriden with the following environment variables. All paths must include names, therefore they can be renamed as well.
  - **PINT_APP_DIR** - absolute path to the *apps* directory.
  - **PINT_DIST_DIR** - absolute path to the *dist* directory.
+ - **PINT_SHIM_DIR** - absolute path to the *shims* directory.
  - **PINT_PACKAGES_FILE** - absolute path to packages.ini.
  - **PINT_PACKAGES_FILE_USER** - absolute path to packages.user.ini.
  - **PINT_SRC_FILE** - absolute path to sources.list.
