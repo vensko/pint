@@ -13,7 +13,6 @@ if not defined PINT_APP_DIR set "PINT_APP_DIR=%~dp0apps"
 if not defined PINT_PACKAGES_FILE set "PINT_PACKAGES_FILE=%~dp0packages.ini"
 if not defined PINT_PACKAGES_FILE_USER set "PINT_PACKAGES_FILE_USER=%~dp0packages.user.ini"
 if not defined PINT_SRC_FILE set "PINT_SRC_FILE=%~dp0sources.list"
-if not defined PINT_TEMP_FILE set "PINT_TEMP_FILE=%TEMP%\pint.tmp"
 if not defined PINT_USER_AGENT set "PINT_USER_AGENT=PintBot/1.0 (+https://github.com/vensko/pint)"
 
 SET "FINDSTR=%WINDIR%\system32\findstr.exe"
@@ -105,7 +104,7 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, $delete)
 			$subsystem = $null
 			try {
 				$fs = [IO.File]::OpenRead($relpath)
-				$br = new-object IO.BinaryReader($fs)
+				$br = new-object IO.BinaryReader $fs
 				if ($br.ReadUInt16() -ne 23117) { return }
 				$fs.Position = 0x3C
 				$fs.Position = $br.ReadUInt32()
@@ -255,7 +254,7 @@ function pint-read-ini([string]$file, [string]$term)
 	if (!(is-file $file)) { return $result }
 
 	if (!$global:ini[$file]) {
-		$s = new-object System.IO.StreamReader($file)
+		$s = new-object System.IO.StreamReader $file
 		$global:ini[$file] = $s.readToEnd()
 		$s.close()
 	}
@@ -339,7 +338,6 @@ function pint-make-http-request([string]$url, $download, $disableAutoRedirect)
 		$req.AllowAutoRedirect = !$disableAutoRedirect
 		$req.MaximumAutomaticRedirections = $global:httpMaxRedirects
 		$req.Accept = '*/*'
-		$req.AuthenticationLevel = 'None'
 		$req.GetResponse()
 	} catch [System.Management.Automation.MethodInvocationException] {
 		$maxRedirects = $global:httpMaxRedirects
@@ -486,26 +484,26 @@ function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
 	write-host "Downloading $($res.ResponseUri) ($("{0:N2} MB" -f ($totalLength / 1024)))"
 
 	$remoteName = pint-get-remote-name $res
-	$responseStream = $res.GetResponseStream()
-	$targetStream = new-object -TypeName System.IO.FileStream -ArgumentList $targetFile, Create
+	$rs = $res.GetResponseStream()
+	$fs = new-object System.IO.FileStream $targetFile, 'Create'
 	$buffer = new-object byte[] 128KB
-	$count = $responseStream.Read($buffer, 0, $buffer.length)
+	$count = $rs.Read($buffer, 0, $buffer.length)
 	$downloaded = $count
 	$progressBar = ($res.ContentLength -gt 1MB)
 	while ($count -gt 0) {
-		$targetStream.Write($buffer, 0, $count)
-		$count = $responseStream.Read($buffer, 0, $buffer.length)
+		$fs.Write($buffer, 0, $count)
+		$count = $rs.Read($buffer, 0, $buffer.length)
 		if ($progressBar) {
 			$downloaded += $count
 			write-progress -activity "Downloading file $remoteName" -status "Downloaded ($([System.Math]::Floor($downloaded / 1024))K of $($totalLength)K): " -PercentComplete ((([System.Math]::Floor($downloaded / 1024)) / $totalLength)  * 100)
 		}
 	}
 	write-progress -completed -activity "Downloading file $remoteName" -status "Done"
-	$targetStream.Flush()
-	$targetStream.Close()
-	if ($targetStream.Dispose -ne $null) {
-		$targetStream.Dispose()
-		$responseStream.Dispose()
+	$fs.Flush()
+	$fs.Close()
+	if ($fs.Dispose -ne $null) {
+		$fs.Dispose()
+		$rs.Dispose()
 	}
 	$res.Close()
 
@@ -538,7 +536,7 @@ function pint-download-app($id, $arch, $res)
 	$file = join-path $env:PINT_DIST_DIR "$id--$arch--$name"
 
 	if (is-file $file) {
-		if ((new-object System.IO.FileInfo($file)).length -eq $res.ContentLength) {
+		if ((new-object System.IO.FileInfo $file).length -eq $res.ContentLength) {
 			$res.close()
 			write-host 'The local file has the same size as the remote one, skipping redownloading.'
 			return $file
@@ -564,11 +562,6 @@ function pint-dir([string]$path)
 		$path = join-path $env:PINT_APP_DIR $path
 	}
 	$path
-}
-
-function pint-dir-empty([string]$path)
-{
-	!(dir (pint-dir $path) -name -force -ea 0)
 }
 
 function pint-dir-tracked([string]$path)
@@ -682,7 +675,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 
 	if (($arch -eq 32) -or ($arch -eq 64)) { $info['arch'] = $arch }
 
-	$pintFile = (@($id, $version, $info['arch'], (new-object System.IO.FileInfo($file)).length) | where {$_}) -join " "
+	$pintFile = (@($id, $version, $info['arch'], (new-object System.IO.FileInfo $file).length) | where {$_}) -join " "
 	$pintFile = join-path $destDir "$pintFile.pint"
 
 	del (join-path $destDir '*.pint') -force
@@ -781,7 +774,7 @@ function pint-installto([string]$id, [string]$dir, $arch)
 {
 	if (!$id -or !$dir) { write-host 'Set an ID and a destination directory.'; return }
 
-	if (!(pint-dir-empty $dir)) {
+	if ([bool](dir (pint-dir $dir) -name -force -ea 0)) {
 		write-host (pint-dir $dir) 'is not empty.'
 		$confirm = read-host -prompt 'Do you want to REPLACE its contents? [Y/N] '
 		if ($confirm.trim() -ne 'Y') { return }

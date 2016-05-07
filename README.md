@@ -7,8 +7,6 @@ Pint is a tool for the people who prefer unpacking over installing. Its primary 
 - Inno Setup installers.
 - MSI packages.  
 
-**Pint is not a portabilizer**, though it provides ways to manage portable apps more easily.
-
 # Features
 - Downloads, unpacks and removes selected applications.
 - Checks for updates and downloads them if available.
@@ -18,6 +16,7 @@ Pint is a tool for the people who prefer unpacking over installing. Its primary 
 - Apps can be installed into an arbitrary subdirectory under *apps*. This allows to keep yaP and PortableApps.com packages up to date.
 - Automatically detects console applications and creates batch redirects for them in the apps directory.
 - Can remember, if a 32-bit or a 64-bit application was installed.
+- Can handle multiple installations of the same application.
 - Detects app versions.
 - Forms a report with all installed applications.
 - Can temporarily suppress updates for selected apps.
@@ -26,6 +25,10 @@ Pint is a tool for the people who prefer unpacking over installing. Its primary 
 - Is able to search across all subscribed databases.
 - Allows to keep a custom user database in a separate file (by default, packages.user.ini).
 - Allows to override paths and settings via environment variables.
+
+# What Pint is not
+- **Pint is not a portabilizer**, though it provides ways to manage portable apps more easily.
+- Pint can't install a particular version of an app, only the latest, preferably portable, one. Though, it's often able to detect a version after installation.
 
 # Installation
 To install Pint, save [pint.cmd](https://github.com/vensko/pint/raw/master/pint.cmd) to a separate directory. By default, Pint will create the following items:
@@ -44,7 +47,12 @@ There are also the hard dependencies, installed automatically when needed:
 # Requirements
 - Powershell 2.0+
 - .NET Framework 2.0+  
+
 Both are shipped with Windows 7.
+
+# Alternatives
+- [Scoop](https://github.com/lukesampson/scoop)
+- [Chocolatey](https://github.com/chocolatey/choco)
 
 # Usage
 ```
