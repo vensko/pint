@@ -654,7 +654,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 			$xf = $info['xf'] + ' *.pint $R0'
 			$xd = $info['xd'] + ' $0 $PLUGINSDIR $TEMP'
 
-			& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /PURGE /NJS /NJH /NFL /NDL /NC /NP /NS /R:2 /W:2 /XO /FFT /XF $xf /XD $xd" | out-null
+			& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /E /PURGE /NJS /NJH /NFL /NDL /NC /NP /NS /R:2 /W:2 /XO /FFT /XF $xf /XD $xd" | out-null
 
 			if ($lastexitcode -gt 7) {
 				write-host "Detected errors while copying from $pwd with Robocopy ($lastexitcode)."
@@ -662,7 +662,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 		}
 
 		cd $destDir
-		rd $tempDir -force -recurse
+		# rd $tempDir -force -recurse
 	}
 
 	if ($version = pint-get-version $destDir) {
@@ -769,15 +769,19 @@ function pint-install
 
 function pint-installto([string]$id, [string]$dir, $arch)
 {
-	if (!$id -or !$dir) { write-host 'Set an ID and a destination directory.'; return }
+	try {
+		if (!$id -or !$dir) { write-host 'Set an ID and a destination directory.'; return }
 
-	if ([bool](dir (pint-dir $dir) -name -force -ea 0)) {
-		write-host (pint-dir $dir) 'is not empty.'
-		$confirm = read-host -prompt 'Do you want to REPLACE its contents? [Y/N] '
-		if ($confirm.trim() -ne 'Y') { return }
+		if ([bool](dir (pint-dir $dir) -name -force -ea 0)) {
+			write-host (pint-dir $dir) 'is not empty.'
+			$confirm = read-host -prompt 'Do you want to REPLACE its contents? [Y/N] '
+			if ($confirm.trim() -ne 'Y') { return }
+		}
+
+		pint-force-install $id $dir $arch
+	} catch {
+		write-host $_ -f yellow
 	}
-
-	pint-force-install $id $dir $arch
 }
 
 function pint-purge
