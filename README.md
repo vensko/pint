@@ -2,23 +2,23 @@
 Portable INsTaller - a command-line manager of portable applications for Windows, which fits into a single file.  
 
 Pint is a tool for the people who prefer unpacking over installing. Its primary goal was to provide a way to easily manage a collection of portable apps. With the emergence of portabilizers like [yaP](http://rolandtoth.hu/yaP/), [PortableApps.com Platform](http://portableapps.com/platform/features) and other, focusing solely on the natively portable apps became irrelevant. Pint downloads and unpacks everything it can. At the moment it supports:
-- Zip archives (supported natively).
+- Zip archives.
+- MSI packages.
 - All formats supported by 7-zip (7z, RAR, NSIS installers, etc.).
 - Inno Setup installers.
-- MSI packages.  
 
 # Features
 - Downloads, unpacks and removes selected applications.
 - Checks for updates and downloads them if available.
 - Extracts downloads links from websites using [Xidel](http://www.videlibri.de/xidel.html).
-- Supports RSS and PAD files as link sources, has predefined rules for FileHippo, PortableApps.com and FossHub.
+- Supports RSS and PAD files as link sources, has built-in routines to download from FileHippo, PortableApps.com and FossHub.
 - Unpacks various types of archives and installers and upgrades apps, keeping configuration files intact.
-- Apps can be installed into an arbitrary subdirectory under *apps*. This allows to keep yaP and PortableApps.com packages up to date.
-- Automatically detects console applications and creates batch redirects for them in the apps directory.
+- Apps can be installed into arbitrary subdirectories under *apps*. This allows to keep yaP and PortableApps.com packages up to date.
+- Automatically detects console applications and creates batch redirects for them in the *shims* directory.
 - Can remember, if a 32-bit or a 64-bit application was installed.
 - Can handle multiple installations of the same application.
 - Detects app versions.
-- Forms a report with all installed applications.
+- Forms a report with installed applications.
 - Can temporarily suppress updates for selected apps.
 - Can update itself.
 - Provides a way to subscribe to multiple remote databases, even choose not to use the default one.
