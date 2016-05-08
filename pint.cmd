@@ -387,22 +387,25 @@ function pint-make-request([string]$url, $download)
 	$res
 }
 
+function string-to-xpath-simple($str)
+{
+	(
+		$str -split ',', $null, 'SimpleMatch' |% {
+			$p = $_.trim()
+			$not = ($p[0] -eq '!')
+			$attr = if ($p[-1] -eq '"'){'text()'} else {'@href'}
+			$p = '"' + $p.trimstart('!').trim('"') + '"'
+			$p = "contains($attr, $p)"
+			if ($not) { $p = "not($p)" }
+			$p
+		}
+	) -join ' and '
+}
+
 function string-to-xpath($str)
 {
 	($str -split '|', $null, 'SimpleMatch' |% {
-		'(' + (
-			(
-				$_ -split ',', $null, 'SimpleMatch' |% {
-					$p = $_.trim()
-					$not = ($p[0] -eq '!')
-					$attr = if ($p[-1] -eq '"'){'text()'} else {'@href'}
-					$p = '"' + $p.trimstart('!').trim('"') + '"'
-					$p = "contains($attr, $p)"
-					if ($not) { $p = "not($p)" }
-					$p
-				}
-			) -join ' and '
-		) + ')'
+		'(' + (string-to-xpath-simple $_) + ')'
 	}) -join ' or '
 }
 
@@ -439,10 +442,9 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 		}
 
 		if (!$link.contains('$json') -and !($link.contains('json('))) {
-			if ($link[0]+$link[1] -ne '//') {
+			if (!$link.contains('//')) {
 				$link = string-to-xpath $link
 				$link = if ($rss) {"//link[$link]"} else {"//a[$link]"}
-				write-host $link
 			}
 
 			if ($link.trimstart('/')[0] -eq 'a') {
@@ -453,8 +455,14 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 		$link = $link.replace('"', "\`"")
 
 		if ($follow) {
-			$follow = $follow.replace('"', "\`"").replace(' | ', '" --follow "')
-			$follow = " --follow `"$follow`""
+			if (!$follow.contains('//')) {
+				$follow = ($follow -split '|', $null, 'SimpleMatch' |% {
+					'--follow "(//a[' + (string-to-xpath-simple $_).replace('"', "\`"") + '])[1]"'
+				}) -join ' '
+			} else {
+				$follow = $follow.replace('"', "\`"").replace(' | ', '" --follow "')
+				$follow = " --follow `"$follow`""
+			}
 		}
 
 		if ($verbose) {
