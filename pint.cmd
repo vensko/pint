@@ -387,6 +387,25 @@ function pint-make-request([string]$url, $download)
 	$res
 }
 
+function string-to-xpath($str)
+{
+	($str -split '|', $null, 'SimpleMatch' |% {
+		'(' + (
+			(
+				$_ -split ',', $null, 'SimpleMatch' |% {
+					$p = $_.trim()
+					$not = ($p[0] -eq '!')
+					$attr = if ($p[-1] -eq '"'){'text()'} else {'@href'}
+					$p = '"' + $p.trimstart('!').trim('"') + '"'
+					$p = "contains($attr, $p)"
+					if ($not) { $p = "not($p)" }
+					$p
+				}
+			) -join ' and '
+		) + ')'
+	}) -join ' or '
+}
+
 function pint-get-dist-link([Hashtable]$info, $verbose)
 {
 	if (!$info['dist']) {
@@ -397,13 +416,15 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 	$link = $info['link']
 	$follow = $info['follow']
 
+	$rss = $dist.contains('/rss')
+
 	if (!$link) {
 		if ($dist.contains('portableapps.com/apps/')) {
 			$link = "//a[contains(@href, '.paf.exe')]"
 		} elseif ($dist.contains('filehippo.com/')) {
 			$follow = "(//a[contains(@class, 'program-header-download-link')])[1]"
 			$link = '//meta[@http-equiv="Refresh"]/@content'
-		} elseif ($dist.contains('/rss')) {
+		} elseif ($rss) {
 			$link = '//item/link'
 		} elseif ($dist.EndsWith('.xml') -or $dist.EndsWith('/pad.php')) {
 			if ($verbose) { write-host 'PAD file detected.' }
@@ -417,8 +438,16 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 			pint-reinstall @('xidel')
 		}
 
-		if (!$link.contains('$json') -and $link.trimstart('/')[0] -eq 'a') {
-			$link += '/resolve-uri(normalize-space(@href), base-uri())'
+		if (!$link.contains('$json') -and !($link.contains('json('))) {
+			if ($link[0]+$link[1] -ne '//') {
+				$link = string-to-xpath $link
+				$link = if ($rss) {"//link[$link]"} else {"//a[$link]"}
+				write-host $link
+			}
+
+			if ($link.trimstart('/')[0] -eq 'a') {
+				$link += '/resolve-uri(normalize-space(@href), base-uri())'
+			}
 		}
 
 		$link = $link.replace('"', "\`"")
