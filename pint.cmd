@@ -662,7 +662,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
 		}
 
 		cd $destDir
-		# rd $tempDir -force -recurse
+		rd $tempDir -force -recurse
 	}
 
 	if ($version = pint-get-version $destDir) {
