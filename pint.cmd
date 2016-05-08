@@ -382,11 +382,6 @@ function pint-make-request([string]$url, $download)
 		throw "$url responded with a HTML page."
 	}
 
-	if ($res.ContentLength -lt 1) {
-		$res.close()
-		throw "Empty response from $url"
-	}
-
 	if (!$download) { $res.close() }
 
 	$res
