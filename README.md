@@ -49,11 +49,7 @@ There are also the hard dependencies, installed automatically when needed:
 - Powershell 2.0+
 - .NET Framework 2.0+  
 
-Both are shipped with Windows 7.
-
-# Alternatives
-- [Scoop](https://github.com/lukesampson/scoop)
-- [Chocolatey](https://github.com/chocolatey/choco)
+Both are shipped with Windows 7+.
 
 # Usage
 ```
@@ -175,3 +171,7 @@ Certain parameters of Pint can be overriden with the following environment varia
  - **PINT_PACKAGES_FILE_USER** - absolute path to packages.user.ini.
  - **PINT_SRC_FILE** - absolute path to sources.list.
  - **PINT_USER_AGENT** - Pint's user agent.
+
+# Alternatives
+- [Scoop](https://github.com/lukesampson/scoop)
+- [Chocolatey](https://github.com/chocolatey/choco)
