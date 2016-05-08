@@ -20,7 +20,7 @@ SET "FINDSTR=%WINDIR%\system32\findstr.exe"
 SET "MSIEXEC=%WINDIR%\system32\msiexec.exe"
 SET "ROBOCOPY=%WINDIR%\system32\robocopy.exe"
 
-path %PINT_APP_DIR%;%PATH%
+path %PINT_SHIM_DIR%;%PATH%
 
 rem Hardcoded URLs
 set "PINT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini"
