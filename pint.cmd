@@ -199,7 +199,7 @@ function pint-get-app([string]$p)
 
 function pint-has($exe)
 {
-	is-file (pint-dir "$exe.bat")
+	is-file (join-path $env:PINT_SHIM_DIR "$exe.bat")
 }
 
 function pint-unpack([string]$file, [string]$dir)
