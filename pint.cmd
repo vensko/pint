@@ -24,7 +24,7 @@ path %PINT_SHIM_DIR%;%PATH%
 
 rem Hardcoded URLs
 set "PINT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini"
-set "PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.bat"
+set "PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.cmd"
 
 set "_args=%*"
 if defined _args set "_args=%_args:"=""""""%"
