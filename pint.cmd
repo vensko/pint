@@ -215,7 +215,7 @@ function pint-unpack([string]$file, [string]$dir)
 	write-host 'Unpacking' $filename
 
 	$fullPath = [System.IO.Path]::GetFullPath($file)
-	$sevenzip = (is-file (pint-dir '7z.bat'))
+	$sevenzip = pint-has '7z'
 
 	switch ([System.IO.Path]::GetExtension($file)) {
 		".msi" {
@@ -238,7 +238,7 @@ function pint-unpack([string]$file, [string]$dir)
 				break
 			}
 
-			if (!(pint-has '7z')) {
+			if (!$sevenzip) {
 				write-host "Pint needs 7-zip to unpack $filename, installing automatically..." -f white
 				pint-reinstall @('7-zip')
 			}

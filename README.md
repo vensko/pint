@@ -8,11 +8,11 @@ Pint is a tool for the people who prefer unpacking over installing. Its primary 
 - Inno Setup installers.
 
 # Features
-- Downloads, unpacks and removes selected applications.
+- Downloads, unpacks and removes applications.
 - Checks for updates and downloads them if available.
 - Extracts downloads links from websites using [Xidel](http://www.videlibri.de/xidel.html).
 - Supports RSS and PAD files as link sources, has built-in routines to download from FileHippo, PortableApps.com and FossHub.
-- Unpacks various types of archives and installers and upgrades apps, keeping configuration files intact.
+- Unpacks various types of archives and installers, and upgrades apps, keeping configuration files intact.
 - Apps can be installed into arbitrary subdirectories under *apps*. This allows to keep yaP and PortableApps.com packages up to date.
 - Automatically detects console applications and creates batch redirects for them in the *shims* directory.
 - Can remember, if a 32-bit or a 64-bit application was installed.
