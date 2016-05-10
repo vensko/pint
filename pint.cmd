@@ -222,12 +222,12 @@ function pint-unpack([string]$file, [string]$dir)
 			& $env:ComSpec /d /c "msiexec /a `"$fullPath`" /norestart /qn TARGETDIR=`"$dir`""
 			break
 		}
-		{!$sevenzip -and ($_ -eq '.zip')} {
-			$shell = new-object -com Shell.Application
-			$zip = $shell.NameSpace($fullPath)
-			$shell.Namespace($dir).copyhere($zip.items(), 20)
-			break
-		}
+#		{!$sevenzip -and ($_ -eq '.zip')} {
+#			$shell = new-object -com Shell.Application
+#			$zip = $shell.NameSpace($fullPath)
+#			$shell.Namespace($dir).copyhere($zip.items(), 20)
+#			break
+#		}
 		default {
 			if (($_ -eq '.exe') -and (& $env:FINDSTR /m /c:"Inno Setup" $file)) {
 				if (!(pint-has 'innoextract')) {
