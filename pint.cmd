@@ -25,6 +25,7 @@ path %PINT_SHIM_DIR%;%PATH%
 rem Hardcoded URLs
 set "PINT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini"
 set "PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.cmd"
+set "PINT_SEVENZIP_URL=http://www.7-zip.org/a/7z1600.msi"
 
 set "_args=%*"
 if defined _args set "_args=%_args:"=""""""%"
@@ -223,9 +224,17 @@ function pint-unpack([string]$file, [string]$dir)
 			break
 		}
 		{!$sevenzip -and ($_ -eq '.zip')} {
-			$shell = new-object -com Shell.Application
-			$zip = $shell.NameSpace($fullPath)
-			$shell.Namespace($dir).copyhere($zip.items(), 20)
+			try {
+				$shell = new-object -com Shell.Application
+				$zip = $shell.NameSpace($fullPath)
+				$shell.Namespace($dir).copyhere($zip.items(), 20)
+			} catch {
+				write-host "Pint needs 7-zip to unpack $filename, installing automatically..." -f white
+				$file = join-path $env:PINT_DIST_DIR ("7-zip--$(get-arch)--" + ($env:PINT_SEVENZIP_URL -split '/')[-1])
+				(pint-wc).DownloadFile($env:PINT_SEVENZIP_URL, $file)
+				pint-file-install '7-zip' $file
+				& $env:ComSpec /d /c "7z x -y -aoa -o`"$dir`" `"$fullPath`"" | out-null
+			}
 			break
 		}
 		default {
@@ -603,7 +612,7 @@ function pint-dir-tracked([string]$path)
 	[bool](dir (pint-dir $path) -n -force -ea 0 -filter *.pint)
 }
 
-function pint-file-install([string]$id, [string]$file, [string]$destDir, $arch)
+function pint-file-install([string]$id, [string]$file, $destDir, $arch)
 {
 	if (!(is-file $file)) {
 		throw [System.IO.FileNotFoundException] "Unable to find $file"
