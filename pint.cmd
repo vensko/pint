@@ -396,25 +396,37 @@ function pint-make-request([string]$url, $download)
 	$res
 }
 
-function string-to-xpath-simple($str)
+function string-to-xpath-simple($str, $rss)
 {
+	$exts = @('.7z', '.zip', '.rar', '.paf.exe')
+
 	(
 		$str -split ',', $null, 'SimpleMatch' |% {
 			$p = $_.trim()
 			$not = ($p[0] -eq '!')
-			$attr = if ($p[-1] -eq '"'){'text()'} else {'@href'}
-			$p = '"' + $p.trimstart('!').trim('"') + '"'
-			$p = "contains($attr, $p)"
+			$attr = if ($rss -or ($p[-1] -eq '"')){'text()'} else {'@href'}
+			$p = $p.trimstart('!').trim('"')
+			switch ($p) {
+				{@('.arch', '.any') -contains $_} {
+					$e = if ($_ -eq '.any') {$exts + @('.exe')} else {$exts}
+					$p = $e |% { "contains($attr, `"$_`")" }
+					$p = '(' + ($p -join ' or ') + ')'
+					break
+				}
+				default {
+					$p = "contains($attr, `"$p`")"
+				}
+			}
 			if ($not) { $p = "not($p)" }
 			$p
 		}
 	) -join ' and '
 }
 
-function string-to-xpath($str)
+function string-to-xpath($str, $rss)
 {
 	($str -split '|', $null, 'SimpleMatch' |% {
-		'(' + (string-to-xpath-simple $_) + ')'
+		'(' + (string-to-xpath-simple $_ $rss) + ')'
 	}) -join ' or '
 }
 
@@ -452,7 +464,7 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 
 		if (!$link.contains('$json') -and !($link.contains('json('))) {
 			if (!$link.contains('//')) {
-				$link = string-to-xpath $link
+				$link = string-to-xpath $link $rss
 				$link = if ($rss) {"//link[$link]"} else {"//a[$link]"}
 			}
 
