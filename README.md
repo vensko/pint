@@ -1,5 +1,6 @@
 # Pint
 Portable INsTaller - a command-line manager of portable applications for Windows, which fits into a single file.  
+[Support forum](http://www.portablefreeware.com/forums/viewtopic.php?f=6&t=22888) at TPFC.  
 
 Pint is a tool for the people who prefer unpacking over installing. Its primary goal was to provide a way to easily manage a collection of portable apps. With the emergence of portabilizers like [yaP](http://rolandtoth.hu/yaP/), [PortableApps.com Platform](http://portableapps.com/platform/features) and other, focusing solely on the natively portable apps became irrelevant. Pint downloads and unpacks everything it can. At the moment it supports:
 - Zip archives.
@@ -173,7 +174,7 @@ Certain parameters of Pint can be overriden with the following environment varia
  - **PINT_USER_AGENT** - Pint's user agent.
 
 # INI format
-The apps database is contained in a single %PINT_PACKAGES_FILE% file (packages.ini by default).
+The apps database is located in packages.ini (%PINT_PACKAGES_FILE%). This file is being overwritten upon every update and should never be edited automatically. Use a separate *packages.user.ini* (%PINT_PACKAGES_FILE_USER%) file for custom configuration.  
 Each app is described in a separate section:
 ```
 [app-id]
@@ -197,13 +198,13 @@ Use lowercase string without spaces as application identifiers. They must be uni
 
 **type** - all downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is *standalone*, which means the downloaded file will be copied as is without unpacking.
 
-**base** - a base path inside an archive. To better explain this, I better tell, how this works. Once the archive is unpacked into a temporary directory, the script switches to that directory and retrieves a list of files. Then it goes line by line, until the **base** substring is found (it doesn't have to be a valid file or directory path, can be even a fragment). Once this substring is encountered, the working path changes to the directory, containing the file, where the search stopped. That's right, a *parent* directory of that file/dir will become a base path. Default **base** value is *.exe*, which means, that the first encountered directory with an .exe file will be used.
+**base** - a base path inside an archive. To better explain this, I better tell, how this works. Once the archive is unpacked into a temporary directory, the script switches to that directory and retrieves a list of files. Then it goes line by line, until the **base** substring is found (it doesn't have to be a valid file or directory path, can be just a fragment). Once this substring is encountered, the working path changes to the directory, containing the file, where the search stopped. That's right, a *parent* directory of that file/dir will become the base path. Default **base** value is *.exe*, which means, that the first encountered directory with an .exe file will be used.
 
 **keep** - Pint *replaces* contents of target directories, keeping files, listed in this parameter, intact. Typically, is used for configuration files. Must be a comma separated list of filenames/masks. Default value - \*.ini, \*.db.
 
 **only** - comma-separated list of files/masks, which should be copied. Useful for highly customizable apps, which typically contain a lot of custom assets - themes, plugins, etc.
 
-**xd**, **xf** - comma-separated lists of directores and files (respectively), which should be left behind. These files will be neither removed from a target directory, nor copied from a temporary one. Pint uses Robocopy to copy files. These parameters are used as values for its /XD and /XF parameters. If **only** is set, this parameters are ignored.
+**xd**, **xf** - comma-separated lists of directores and files (respectively), which should be left behind. These files will be neither removed from a target directory, nor copied from a temporary one. Pint uses Robocopy to copy files. These parameters are used as values for its /XD and /XF parameters. If **only** is set, these parameters are ignored.
 
 **noshim** - Pint automatically detects console applications and creates batch redirects for them (this is a temporary solution). Files, listed in **noshim**, will be skipped.
 
