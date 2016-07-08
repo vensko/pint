@@ -172,6 +172,46 @@ Certain parameters of Pint can be overriden with the following environment varia
  - **PINT_SRC_FILE** - absolute path to sources.list.
  - **PINT_USER_AGENT** - Pint's user agent.
 
+# INI format
+The apps database is contained in a single %PINT_PACKAGES_FILE% file (packages.ini by default).
+Each app is described in a separate section:
+```
+[app-id]
+dist = http://example.com/dist.zip
+
+[another-app-id]
+dist = http://example.com/
+link = x86, .zip
+link64 = x64, .zip
+keep = *.xml
+```
+Use lowercase string without spaces as application identifiers. They must be unique, otherwise they may be overridden by an app with the same id.
+
+**Available keys**
+
+**dist** - if **link** is not defined, **data** is treated as a direct download URL to a file. If **link** is defined, the URL must point to a web page. The only mandatory key.
+
+**link** - must be either a full XPath expression, starting with // and searching for &lt;a&gt; elements, or a comma-separated list of words, expected to be found in a download URL.  
+**XPath example:** *//a[contains(@href, '.zip') and contains(@href, 'x86')]*  
+**Simplified syntax:** *.zip, x86*  
+
+**type** - all downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is *standalone*, which means the downloaded file will be copied as is without unpacking.
+
+**base** - a base path inside an archive. To better explain this, I better tell, how this works. Once the archive is unpacked into a temporary directory, the script switches to that directory and retrieves a list of files. Then it goes line by line, until the **base** substring is found (it doesn't have to be a valid file or directory path, can be even a fragment). Once this substring is encountered, the working path changes to the directory, containing the file, where the search stopped. That's right, a *parent* directory of that file/dir will become a base path. Default **base** value is *.exe*, which means, that the first encountered directory with an .exe file will be used.
+
+**keep** - Pint *replaces* contents of target directories, keeping files, listed in this parameter, intact. Typically, is used for configuration files. Must be a comma separated list of filenames/masks. Default value - \*.ini, \*.db.
+
+**only** - comma-separated list of files/masks, which should be copied. Useful for highly customizable apps, which typically contain a lot of custom assets - themes, plugins, etc.
+
+**xd**, **xf** - comma-separated lists of directores and files (respectively), which should be left behind. These files will be neither removed from a target directory, nor copied from a temporary one. Pint uses Robocopy to copy files. These parameters are used as values for its /XD and /XF parameters. If **only** is set, this parameters are ignored.
+
+**noshim** - Pint automatically detects console applications and creates batch redirects for them (this is a temporary solution). Files, listed in **noshim**, will be skipped.
+
+Append *64* to a key to prefer it in a 64-bit system.  
+dist = http://example.com/archive.zip  
+dist64 = http://example.com/archive64.zip  
+If a key has no a 64-bit counterpart, base name will be used as a fallback.
+
 # Alternatives
 - [Scoop](https://github.com/lukesampson/scoop)
 - [Chocolatey](https://github.com/chocolatey/choco)

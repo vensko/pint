@@ -468,7 +468,7 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 				$link = if ($rss) {"//link[$link]"} else {"//a[$link]"}
 			}
 
-			if ($link.trimstart('/')[0] -eq 'a') {
+			if ($link.contains('/a')) {
 				$link += '/resolve-uri(normalize-space(@href), base-uri())'
 			}
 		}
@@ -545,6 +545,7 @@ function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
 	$count = $rs.Read($buffer, 0, $buffer.length)
 	$downloaded = $count
 	$progressBar = ($res.ContentLength -gt 1MB)
+
 	while ($count -gt 0) {
 		$fs.Write($buffer, 0, $count)
 		$count = $rs.Read($buffer, 0, $buffer.length)
@@ -553,13 +554,17 @@ function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
 			write-progress -activity "Downloading file $remoteName" -status "Downloaded ($([System.Math]::Floor($downloaded / 1024))K of $($totalLength)K): " -PercentComplete ((([System.Math]::Floor($downloaded / 1024)) / $totalLength)  * 100)
 		}
 	}
+
 	write-progress -completed -activity "Downloading file $remoteName" -status "Done"
+
 	$fs.Flush()
 	$fs.Close()
+
 	if ($fs.Dispose -ne $null) {
 		$fs.Dispose()
 		$rs.Dispose()
 	}
+
 	$res.Close()
 
 	$targetFile
@@ -572,6 +577,7 @@ function pint-get-remote-name([System.Net.WebResponse]$res)
 	} else {
 		$name = ([string]$res.ResponseUri -split '/', $null, 'SimpleMatch')[-1]
 	}
+
 	($name -split '?', 2, 'SimpleMatch')[0]
 }
 
@@ -936,12 +942,14 @@ function pint-list($detailed)
 {
 	$table = @()
 	$fso = new-object -com Scripting.FileSystemObject
+
 	dir $env:PINT_APP_DIR -n -r -force -filter *.pint | % {
 		$dir = dirname $_
 		$name = basename $_
 		$id = ($name -split ' ', 2, 'SimpleMatch')[0]
 		$arch = if ($name.contains(' 32 ')) {32} else {64}
 		$fullpath = pint-dir $dir
+
 		$table += new-object -TypeName PSObject -Prop @{
 			ID = $id
 			Directory = $dir + '  '
@@ -1035,9 +1043,12 @@ function pint-update
 	write-host 'Updating the database...'
 	$wc = pint-wc
 	$result = ''
+
 	[IO.File]::ReadAllLines((pint-src-file)) |% {
 		if (!($_ = $_.trim()) -or $_[0] -eq ';') { return }
+
 		write-host $_ -nonewline
+
 		if ($res = $wc.DownloadString($_)) {
 			write-host "`r$_" -f green
 			$result += $res.trim()
@@ -1045,7 +1056,9 @@ function pint-update
 			write-host "`r$_" -f red
 		}
 	}
+
 	$result | out-file $env:PINT_PACKAGES_FILE -encoding ascii
+
 	write-host 'Done.'
 }
 
@@ -1064,15 +1077,19 @@ function pint-pin
 	$args |% {
 		$app = $_
 		$dir = pint-dir $_
+
 		if (!($files = dir $dir -ea 0 -n -force -filter *.pint)) {
 			write-host $_ 'is not managed by Pint, try to reinstall it.' -f yellow; return
 		}
+
 		$s = ' pinned'
 		$p = ''
+
 		if ($env:PINT_UNPIN) {
 			$s = ''
 			$p = 'un'
 		}
+
 		$files |% {
 			$n = (basename $_).replace(' pinned', '') + $s
 			ren (join-path $dir $_) "$n.pint" -force
@@ -1092,9 +1109,11 @@ function pint-search($term)
 	$term = if ($term) {"\s*\[.*$term.*\]"} else {"\s*\["}
 
 	$result = @()
+
 	if (is-file $env:PINT_PACKAGES_FILE_USER) {
 		$result += (& $env:FINDSTR /I /B /R $term $env:PINT_PACKAGES_FILE_USER | sort)
 	}
+
 	$result += (& $env:FINDSTR /I /B /R $term (pint-db-file) | sort)
 
 	if (!$result.count) {
