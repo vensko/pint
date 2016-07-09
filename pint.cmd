@@ -965,19 +965,6 @@ function pint-list($detailed)
 	$table | ft Directory,ID,Version,Size,Arch -autosize
 }
 
-function pint-self-update
-{
-	write-host 'Fetching' $env:PINT_SELF_URL
-	$res = (pint-wc).DownloadString($env:PINT_SELF_URL)
-	if ($res -and $res.contains('PINT - Portable INsTaller')) {
-		$res | out-file $env:PINT -encoding ascii
-		write-host 'Pint was updated to the latest version.'
-	} else {
-		write-host 'Self-update failed!'
-		exit 1
-	}
-}
-
 function pint-subscribe($url)
 {
 	if (!$url) {
@@ -1042,7 +1029,22 @@ function pint-exists($file)
 	((is-file $file) -and (new-object System.IO.FileInfo($file)).length -ne 0)
 }
 
-function pint-update
+function pint-self-update
+{
+	write-host 'Fetching' $env:PINT_SELF_URL
+
+	$res = (pint-wc).DownloadString($env:PINT_SELF_URL)
+
+	if ($res -and $res.contains('PINT - Portable INsTaller')) {
+		$res | out-file $env:PINT -encoding ascii
+		write-host 'Pint was updated to the latest version.'
+	} else {
+		write-host 'Self-update failed!'
+		exit 1
+	}
+}
+
+function pint-db-update
 {
 	write-host 'Updating the database...'
 	$wc = pint-wc
@@ -1064,6 +1066,12 @@ function pint-update
 	$result | out-file $env:PINT_PACKAGES_FILE -encoding ascii
 
 	write-host 'Done.'
+}
+
+function pint-update
+{
+	pint-self-update
+	pint-db-update
 }
 
 function basename($f)

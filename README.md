@@ -65,7 +65,8 @@ Self-explanatory. Updates Pint to the latest version.
 ```
 pint update
 ```
-Downloads all files listed in *sources.list* and combines them into *packages.ini*. Never edit *packages.ini* manually, your changes will be lost! Use a separate *packages.user.ini* file for custom packages.
+Downloads all files listed in *sources.list* and combines them into *packages.ini*. Never edit *packages.ini* manually, your changes will be lost! Use a separate *packages.user.ini* file for custom packages.  
+Also triggers *self-update*.
 ```
 pint search [<term>]
 ```
