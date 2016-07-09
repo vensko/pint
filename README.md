@@ -106,6 +106,11 @@ pint purge <dir> [<dir>]
 ```
 Removes the subdirectories AND deletes corresponding archives from *dist*.
 ```
+pint cleanup [<prefix> [<prefix>]]
+```
+Deleted installers. Optionally, prefixes of files to remove can be set.  
+For instance, *pint cleanup python node* will remove all archives with names starting with python2, python3, node4 and node5.
+```
 pint outdated [<dir> [<dir>]]
 ```
 Checks for updates for the apps. With parameters omitted, Pint will check all installed apps.
@@ -195,6 +200,8 @@ Use lowercase string without spaces as application identifiers. They must be uni
 **link** - must be either a full XPath expression, starting with // and searching for &lt;a&gt; elements, or a comma-separated list of words, expected to be found in a download URL.  
 **XPath example:** *//a[contains(@href, '.zip') and contains(@href, 'x86')]*  
 **Simplified syntax:** *.zip, x86*  
+To scan link texts, wrap words in quotes: *.zip, "portable"  
+Simplified queries are case-insensitive. At the moment this isn't true for FossHub though because of incorrect HTML structure on their website.  
 
 **type** - all downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is *standalone*, which means the downloaded file will be copied as is without unpacking.
 

@@ -62,7 +62,8 @@ function pint-usage
 		@('pin <dir>', 'Suppress updates for selected apps.'),
 		@('unpin <dir>', 'Allow updates for selected apps (undoes the pin command).'),
 		@('remove <dir>', 'Delete selected apps (this is equivalent to manual deletion).'),
-		@('purge <dir>', 'Delete selected apps AND their installers.'),
+		@('purge <dir>', 'Delete selected apps AND their archives.'),
+		@('cleanup [<prefix>]', 'Delete archives from dist.'),
 		@('forget <dir>', 'Stop tracking of selected apps.'),
 		@('download <app>', 'Only download selected installers without unpacking them.'),
 		@('subscribed', 'Show the list of databases, you are subscribed to.'),
@@ -401,23 +402,26 @@ function string-to-xpath-simple($str, $rss)
 	$exts = @('.7z', '.zip', '.rar', '.paf.exe')
 
 	(
-		$str -split ',', $null, 'SimpleMatch' |% {
+		$str.ToLower() -split ',', $null, 'SimpleMatch' |% {
 			$p = $_.trim()
 			$not = ($p[0] -eq '!')
-			$attr = if ($rss -or ($p[-1] -eq '"')){'text()'} else {'@href'}
+			$attr = if ($rss -or ($p[-1] -eq '"')) { 'text()' } else { '@href' }
 			$p = $p.trimstart('!').trim('"')
+
 			switch ($p) {
 				{@('.arch', '.any') -contains $_} {
-					$e = if ($_ -eq '.any') {$exts + @('.exe')} else {$exts}
-					$p = $e |% { "contains($attr, `"$_`")" }
+					$e = if ($_ -eq '.any') { $exts + @('.exe') } else { $exts }
+					$p = $e |% { "contains(lower-case($attr), `"$_`")" }
 					$p = '(' + ($p -join ' or ') + ')'
 					break
 				}
 				default {
-					$p = "contains($attr, `"$p`")"
+					$p = "contains(lower-case($attr), `"$p`")"
 				}
 			}
+
 			if ($not) { $p = "not($p)" }
+
 			$p
 		}
 	) -join ' and '
@@ -1120,6 +1124,18 @@ function pint-search($term)
 		write-host 'Nothing found.'
 	} else {
 		write-host ($result -join "`n").replace('[', '').replace(']', '')
+	}
+}
+
+function pint-cleanup
+{
+	if (!$args.count) { $args = @('') }
+
+	$args | % {
+		dir (join-path $env:PINT_DIST_DIR "$_*") -n -force | % {
+			write-host 'Removing' $_
+			del (join-path $env:PINT_DIST_DIR $_) -force -recurse
+		}
 	}
 }
 
