@@ -1036,6 +1036,7 @@ function pint-self-update
 	$res = (pint-wc).DownloadString($env:PINT_SELF_URL)
 
 	if ($res -and $res.contains('PINT - Portable INsTaller')) {
+		clc $env:PINT
 		$res | out-file $env:PINT -encoding ascii
 		write-host 'Pint was updated to the latest version.'
 	} else {
