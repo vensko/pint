@@ -201,7 +201,7 @@ Use lowercase string without spaces as application identifiers. They must be uni
 **XPath example:** *//a[contains(@href, '.zip') and contains(@href, 'x86')]*  
 **Simplified syntax:** *.zip, x86*  
 To scan link texts, wrap words in quotes: *.zip, "portable"  
-Simplified queries are case-insensitive. At the moment this isn't true for FossHub though because of incorrect HTML structure on their website.  
+Simplified queries are case-insensitive.  
 
 **type** - all downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is *standalone*, which means the downloaded file will be copied as is without unpacking.
 

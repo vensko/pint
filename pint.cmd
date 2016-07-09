@@ -405,7 +405,7 @@ function string-to-xpath-simple($str, $rss)
 		$str.ToLower() -split ',', $null, 'SimpleMatch' |% {
 			$p = $_.trim()
 			$not = ($p[0] -eq '!')
-			$attr = if ($rss -or ($p[-1] -eq '"')) { 'text()' } else { '@href' }
+			$attr = if ($rss -or ($p[-1] -eq '"')) { '.' } else { '@href' }
 			$p = $p.trimstart('!').trim('"')
 
 			switch ($p) {
