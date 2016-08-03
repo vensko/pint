@@ -276,8 +276,10 @@ function pint-read-ini([string]$file, [string]$term)
 
 	if ($text) {
 		$lines = ($text -split "`n[", 2, 'SimpleMatch')[0] -split "`n", $null, 'SimpleMatch'
+
 		foreach ($line in $lines) {
 			$key, $val = $line -split '=', 2, 'SimpleMatch'
+
 			if ($val -ne $null) {
 				$key = $key.trim()
 				if ($key[0] -ne ';') {
@@ -527,7 +529,9 @@ function pint-is-app-outdated([Hashtable]$app, $download)
 {
 	if (($url = pint-get-dist-link $app $verbose) -and ($res = pint-make-request $url $download)) {
 		if ($res.ContentLength -eq $app['size']) {
-			if ($download) { $res.close() }
+			if ($download) {
+				$res.close()
+			}
 			return $false
 		}
 		$res
@@ -591,6 +595,7 @@ function pint-download-app($id, $arch, $res)
 		if (!($info = pint-get-app-info $id $arch) -or !($url = pint-get-dist-link $info $true)) {
 			throw "Unable to find $id in the database."
 		}
+
 		$arch = $info['arch']
 		$res = pint-make-request $url $true
 	}
@@ -720,7 +725,7 @@ function pint-file-install([string]$id, [string]$file, $destDir, $arch)
 			}
 		} else {
 			$xf = $info['xf'] + ' *.pint $R0'
-			$xd = $info['xd'] + ' $0 $PLUGINSDIR $TEMP'
+			$xd = $info['xd'] + ' $0 $PLUGINSDIR $TEMP $_OUTDIR'
 
 			& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /E /PURGE /NJS /NJH /NFL /NDL /NC /NP /NS /R:2 /W:2 /XO /FFT /XF $xf /XD $xd" | out-null
 
@@ -738,7 +743,9 @@ function pint-file-install([string]$id, [string]$file, $destDir, $arch)
 		$version = "v$version"
 	}
 
-	if (($arch -eq 32) -or ($arch -eq 64)) { $info['arch'] = $arch }
+	if (($arch -eq 32) -or ($arch -eq 64)) {
+		$info['arch'] = $arch
+	}
 
 	$pintFile = (@($id, $version, $info['arch'], (new-object System.IO.FileInfo $file).length) | where {$_}) -join " "
 	$pintFile = join-path $destDir "$pintFile.pint"
@@ -753,7 +760,13 @@ function pint-file-install([string]$id, [string]$file, $destDir, $arch)
 function max-length($array)
 {
 	$max = 0
-	$array | % { if ($_.length -gt $max) { $max = $_.length } }
+
+	$array | % {
+		if ($_.length -gt $max) {
+			$max = $_.length
+		}
+	}
+
 	$max
 }
 
@@ -890,8 +903,16 @@ function pint-outdated
 
 		try {
 			$app = pint-get-app $_
-			if (!$app) { write-host 'NOT FOUND' -f red; return }
-			if (!$app['size']) { write-host 'NO SIZE DATA' -f darkyellow; return }
+
+			if (!$app) {
+				write-host 'NOT FOUND' -f red
+				return
+			}
+
+			if (!$app['size']) {
+				write-host 'NO SIZE DATA' -f darkyellow
+				return
+			}
 
 			switch (pint-is-app-outdated $app) {
 				$null { write-host 'REQUEST FAILED' -f red }
@@ -916,8 +937,16 @@ function pint-upgrade
 
 		try {
 			$app = pint-get-app $_
-			if (!$app) { write-host 'NOT FOUND' -f red; return }
-			if (!$app['size']) { write-host 'NO SIZE DATA' -f darkyellow; return }
+
+			if (!$app) {
+				write-host 'NOT FOUND' -f red
+				return
+			}
+
+			if (!$app['size']) {
+				write-host 'NO SIZE DATA' -f darkyellow
+				return
+			}
 
 			if ($res = pint-is-app-outdated $app $true) {
 				write-host 'OUTDATED' -f yellow
@@ -951,7 +980,7 @@ function pint-list($detailed)
 		$dir = dirname $_
 		$name = basename $_
 		$id = ($name -split ' ', 2, 'SimpleMatch')[0]
-		$arch = if ($name.contains(' 32 ')) {32} else {64}
+		$arch = if ($name.contains(' 32 ')) { 32 } else { 64 }
 		$fullpath = pint-dir $dir
 
 		$table += new-object -TypeName PSObject -Prop @{
@@ -976,9 +1005,11 @@ function pint-subscribe($url)
 	$list = [IO.File]::ReadAllLines($srcFile)
 
 	if ($list -contains $url) {
-		write-host 'This URL is already registered.' -f red; return
+		write-host 'This URL is already registered.' -f red
+		return
 	} elseif (!$url.StartsWith('http://') -and !$url.StartsWith('https://')) {
-		write-host 'Incorrect URL.' -f red; return
+		write-host 'Incorrect URL.' -f red
+		return
 	}
 
 	@($url) + $list | out-file $srcFile -en ascii
@@ -1036,7 +1067,6 @@ function pint-self-update
 	$res = (pint-wc).DownloadString($env:PINT_SELF_URL)
 
 	if ($res -and $res.contains('PINT - Portable INsTaller')) {
-		clc $env:PINT
 		$res | out-file $env:PINT -encoding ascii
 		write-host 'Pint was updated to the latest version.'
 	} else {
@@ -1106,7 +1136,7 @@ function pint-pin
 		$files |% {
 			$n = (basename $_).replace(' pinned', '') + $s
 			ren (join-path $dir $_) "$n.pint" -force
-			write-host $app ('is '+$p+'pinned.')
+			write-host $app ('is ' + $p + 'pinned.')
 		}
 	}
 }
@@ -1119,7 +1149,7 @@ function pint-unpin
 
 function pint-search($term)
 {
-	$term = if ($term) {"\s*\[.*$term.*\]"} else {"\s*\["}
+	$term = if ($term) { "\s*\[.*$term.*\]" } else { "\s*\[" }
 
 	$result = @()
 
@@ -1162,3 +1192,4 @@ function pint-start($cmd)
 	write-host 'Unknown command'
 	exit 1
 }
+

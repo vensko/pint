@@ -192,7 +192,7 @@ link = x86, .zip
 link64 = x64, .zip
 keep = *.xml
 ```
-Use lowercase string without spaces as application identifiers. They must be unique, otherwise they may be overridden by an app with the same id.
+Use lowercase strings without spaces as application identifiers. They must be unique, otherwise they may be overridden by an app with the same id.
 
 **Available keys**
 
