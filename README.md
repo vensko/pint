@@ -41,7 +41,7 @@ To install Pint, save [pint.cmd](https://github.com/vensko/pint/raw/master/pint.
 
 All paths are customisable, see the "Environment variables" chapter.  
   
-There are also the hard dependencies, installed automatically when needed:
+There are also hard dependencies, installed automatically when needed:
 - [7-zip](http://www.7-zip.org/) - file archiver supporting a wide range of formats,
 - [Xidel](http://www.videlibri.de/xidel.html) - HTML/XML/JSON data extraction tool,
 - [innoextract](http://constexpr.org/innoextract/) - a tool to unpack installers created by Inno Setup.
@@ -180,7 +180,7 @@ Certain parameters of Pint can be overriden with the following environment varia
  - **PINT_USER_AGENT** - Pint's user agent.
 
 # INI format
-The apps database is located in packages.ini (%PINT_PACKAGES_FILE%). This file is being overwritten upon every update and should never be edited automatically. Use a separate *packages.user.ini* (%PINT_PACKAGES_FILE_USER%) file for custom configuration.  
+The apps database is located in packages.ini (%PINT_PACKAGES_FILE%). This file is being overwritten upon every update and should never be edited manually. Use a separate *packages.user.ini* (%PINT_PACKAGES_FILE_USER%) file for custom configuration.  
 Each app is described in a separate section:
 ```
 [app-id]
@@ -201,9 +201,13 @@ Use lowercase strings without spaces as application identifiers. They must be un
 **link** - must be either a full XPath expression, starting with // and searching for &lt;a&gt; elements, or a comma-separated list of words, expected to be found in a download URL.  
 **XPath example:** *//a[contains(@href, '.zip') and contains(@href, 'x86')]*  
 **Simplified syntax:** *.zip, x86*  
-To scan link texts, wrap words in quotes: *.zip, "portable"  
+To scan link texts, wrap words in quotes: *.zip, "portable"*  
 Simplified queries are case-insensitive.  
-
+  
+There are some meta-values:  
+**.arch** means any of the most popular archive formats (at the moment, it includes .7z, .zip, .rar, and .paf.exe),  
+**.any** is the same as .arch plus .exe.  
+  
 **type** - all downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is *standalone*, which means the downloaded file will be copied as is without unpacking.
 
 **base** - a base path inside an archive. To better explain this, I better tell, how this works. Once the archive is unpacked into a temporary directory, the script switches to that directory and retrieves a list of files. Then it goes line by line, until the **base** substring is found (it doesn't have to be a valid file or directory path, can be just a fragment). Once this substring is encountered, the working path changes to the directory, containing the file, where the search stopped. That's right, a *parent* directory of that file/dir will become the base path. Default **base** value is *.exe*, which means, that the first encountered directory with an .exe file will be used.
