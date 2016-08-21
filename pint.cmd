@@ -510,7 +510,7 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 			$dist = $dist.trim()
 
 			if ($dist.contains('fosshub.com/')) {
-				$dist = $dist.replace('fosshub.com/', 'fosshub.com/genLink/').replace('.html/', '/')
+				$dist = $dist.replace('fosshub.com/', 'fosshub.com/gensLink/').replace('.html/', '/')
 				$dist = (pint-wc).DownloadString($dist).trim()
 			} elseif ($info['dist'].contains('filehippo.com/')) {
 				$dist = 'http://filehippo.com' + ($dist -split '=', 2, 'SimpleMatch')[1]
