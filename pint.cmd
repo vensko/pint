@@ -472,9 +472,13 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 			if (!$link.contains('//')) {
 				$link = string-to-xpath $link $rss
 				$link = if ($rss) {"//link[$link]"} else {"//a[$link]"}
+
+				if ($dist.contains('fosshub.com/')) {
+					$link += '/@data'
+				}
 			}
 
-			if ($link.contains('/a')) {
+			if (!$dist.contains('fosshub.com/') -and $link.contains('/a')) {
 				$link += '/resolve-uri(normalize-space(@href), base-uri())'
 			}
 		}
@@ -509,10 +513,7 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 		} else {
 			$dist = $dist.trim()
 
-			if ($dist.contains('fosshub.com/')) {
-				$dist = $dist.replace('fosshub.com/', 'fosshub.com/gensLink/').replace('.html/', '/')
-				$dist = (pint-wc).DownloadString($dist).trim()
-			} elseif ($info['dist'].contains('filehippo.com/')) {
+			if ($info['dist'].contains('filehippo.com/')) {
 				$dist = 'http://filehippo.com' + ($dist -split '=', 2, 'SimpleMatch')[1]
 			}
 		}
