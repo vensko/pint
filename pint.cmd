@@ -474,7 +474,7 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 				$link = if ($rss) {"//link[$link]"} else {"//a[$link]"}
 
 				if ($dist.contains('fosshub.com/')) {
-					$link += '/@data'
+					$link += '/concat("https://www.fosshub.com/gensLink", @data, "/", @cacheid)'
 				}
 			}
 
@@ -508,13 +508,15 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 
 		$dist = & $env:ComSpec /d /c "$out xidel $method --header=`"Referer: $dist`" --user-agent=`"$($env:PINT_USER_AGENT)`" `"$dist`" $follow $quiet --extract `"($link)[1]`""
 
-		if ($lastexitcode -or !$dist) {
+		if ($lastexitcode -or !$dist -or !$dist.contains('://')) {
 			$dist = $null
 		} else {
 			$dist = $dist.trim()
 
 			if ($info['dist'].contains('filehippo.com/')) {
 				$dist = 'http://filehippo.com' + ($dist -split '=', 2, 'SimpleMatch')[1]
+			} elseif ($info['dist'].contains('fosshub.com/')) {
+				$dist = (pint-wc).DownloadString($dist).trim()
 			}
 		}
 	}
