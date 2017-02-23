@@ -354,6 +354,10 @@ function pint-make-http-request([string]$url, $download, $disableAutoRedirect)
 		$req.Accept = '*/*'
 		$req.GetResponse()
 	} catch [System.Management.Automation.MethodInvocationException] {
+		if ($_.Exception.Message.contains('403')) {
+			throw "403 Access Denied"
+		}
+
 		$maxRedirects = $global:httpMaxRedirects
 		while ($true) {
 			if ($url.StartsWith('ftp:')) {
