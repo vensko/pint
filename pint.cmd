@@ -510,7 +510,15 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 
 		$method = if ($info['method']) {'-d "'+$info['data']+'" --method '+$info['method']} else {''}
 
-		$dist = & $env:ComSpec /d /c "$out xidel $method --header=`"Referer: $dist`" --user-agent=`"$($env:PINT_USER_AGENT)`" `"$dist`" $follow $quiet --extract `"($link)[1]`""
+		$proxyEnabled = (get-itemproperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').ProxyEnable
+		if ($proxyEnabled) {
+			$proxyAddr = (get-itemproperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').ProxyServer
+			$proxy = "--proxy=`"$proxyAddr`""
+		} else {
+			$proxy = ""
+		}
+
+		$dist = & $env:ComSpec /d /c "$out xidel $method $proxy --header=`"Referer: $dist`" --user-agent=`"$($env:PINT_USER_AGENT)`" `"$dist`" $follow $quiet --extract `"($link)[1]`""
 
 		if ($lastexitcode -or !$dist -or !$dist.contains('://')) {
 			$dist = $null
