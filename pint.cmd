@@ -28,8 +28,9 @@ set "PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.cmd
 set "PINT_SEVENZIP_URL=http://www.7-zip.org/a/7z1600.msi"
 
 rem Find correct processor architecture
-powershell $env:PROCESSOR_ARCHITEW6432 > Output
-set /p ARCH=<Output
+powershell $env:PROCESSOR_ARCHITEW6432 > arch.tmp
+set /p ARCH=<arch.tmp
+del arch.tmp
 if (%ARCH%) == "AMD64" (
     set "POWERSHELL=powershell"
 ) else (
