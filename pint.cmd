@@ -512,7 +512,7 @@ function pint-get-dist-link([Hashtable]$info, $verbose)
 
 		$proxyEnabled = (get-itemproperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').ProxyEnable
 		if ($proxyEnabled) {
-			$proxyAddr = (get-itemproperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').ProxyServer
+			$proxyAddr = (get-itemproperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').ProxyServer -replace "^http://", ""
 			$proxy = "--proxy=`"$proxyAddr`""
 		} else {
 			$proxy = ""
