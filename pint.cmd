@@ -27,9 +27,18 @@ set "PINT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages
 set "PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.cmd"
 set "PINT_SEVENZIP_URL=http://www.7-zip.org/a/7z1600.msi"
 
+rem Find correct processor architecture
+powershell $env:PROCESSOR_ARCHITEW6432 > Output
+set /p ARCH=<Output
+if (%ARCH%) == "AMD64" (
+    set "POWERSHELL=powershell"
+) else (
+    set "POWERSHELL=%SystemRoot%\sysnative\windowspowershell\v1.0\powershell.exe"
+)
+
 set "_args=%*"
 if defined _args set "_args=%_args:"=""""""%"
-powershell -NoLogo -NoProfile -executionpolicy bypass "$s = ${%PINT%} | out-string; $s += """pint-start %_args%"""; iex($s)" || exit /b 1
+%POWERSHELL% -NoLogo -NoProfile -executionpolicy bypass "$s = ${%PINT%} | out-string; $s += """pint-start %_args%"""; iex($s)" || exit /b 1
 exit /b 0
 
 goto :eof
