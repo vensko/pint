@@ -36,6 +36,8 @@ goto :eof
 
 end Batch / begin PowerShell #>
 
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $global:httpMaxRedirects = 5
 $global:httpTimeout = 10000
 $DebugPreference = 'Continue'
