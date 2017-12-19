@@ -27,14 +27,10 @@ set "PINT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages
 set "PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.cmd"
 set "PINT_SEVENZIP_URL=http://www.7-zip.org/a/7z1600.msi"
 
-rem Find correct processor architecture
-powershell $env:PROCESSOR_ARCHITEW6432 > arch.tmp
-set /p ARCH=<arch.tmp
-del arch.tmp
-if (%ARCH%) == "AMD64" (
-    set "POWERSHELL=powershell"
-) else (
-    set "POWERSHELL=%SystemRoot%\sysnative\windowspowershell\v1.0\powershell.exe"
+rem Start 64bit PowerShell even from 32bit command line
+SET "POWERSHELL=%SystemRoot%\sysnative\windowspowershell\v1.0\powershell.exe"
+if not exist "%POWERSHELL%" (
+	set "POWERSHELL=powershell"
 )
 
 set "_args=%*"
@@ -366,8 +362,8 @@ function pint-make-http-request([string]$url, $download, $disableAutoRedirect)
 		$req.Accept = '*/*'
 		$req.GetResponse()
 	} catch [System.Management.Automation.MethodInvocationException] {
-		if ($_.Exception.Message.contains('403')) {
-			throw "403 Access Denied"
+		if ($_.Exception.Message -match '\((4|5)[\d]{2}\)') {
+			throw $_.Exception.Message
 		}
 
 		$maxRedirects = $global:httpMaxRedirects
