@@ -879,7 +879,7 @@ function pint-installto([string]$id, [string]$dir, $arch)
 		if ([bool](dir (pint-dir $dir) -name -force -ea 0)) {
 			write-host (pint-dir $dir) 'is not empty.'
 			$confirm = read-host -prompt 'Do you want to REPLACE its contents? [Y/N] '
-			if ($confirm.trim() -ne 'Y') { return }
+			if ($confirm.trim().ToUpper() -ne 'Y') { return }
 		}
 
 		pint-force-install $id $dir $arch
