@@ -230,7 +230,7 @@ dist64 = http://example.com/archive64.zip
 If a key has no a 64-bit counterpart, base name will be used as a fallback.
 
 # Shims
-To enable automatic shim generation, download [shimgen.exe](https://github.com/chocolatey/chocolatey/blob/master/src/tools/shimgen.exe) from Chocolatey repository and put it into Pint directory.
+To enable automatic shim generation, download [shimgen.exe](https://github.com/chocolatey/choco/blob/master/src/chocolatey.resources/tools/shimgen.exe) from Chocolatey repository and put it into Pint directory.
 
 # Alternatives
 - [Scoop](https://github.com/lukesampson/scoop)
