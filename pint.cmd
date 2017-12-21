@@ -742,7 +742,7 @@ function pint-file-install([string]$id, [string]$file, $destDir, $arch)
 
 			$params = @{
 				include = $only
-				recurse = $true
+				recurse = $false
 				force = $true
 				name = $true
 				ea = 0
