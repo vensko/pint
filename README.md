@@ -15,7 +15,7 @@ Pint is a tool for the people who prefer unpacking over installing. Its primary 
 - Supports RSS and PAD files as link sources, has built-in routines to download from FileHippo, PortableApps.com and FossHub.
 - Unpacks various types of archives and installers, and upgrades apps, keeping configuration files intact.
 - Apps can be installed into arbitrary subdirectories under *apps*. This allows to keep yaP and PortableApps.com packages up to date.
-- Automatically detects console applications and creates batch redirects for them in the *shims* directory.
+- Automatically detects console applications and creates shim files for them in the *shims* directory. (Read the *Shims* chapter on how to enable automatic shim generation.)
 - Can remember, if a 32-bit or a 64-bit application was installed.
 - Can handle multiple installations of the same application.
 - Detects app versions.
@@ -132,6 +132,10 @@ pint unpin <dir> [<dir>]
 ```
 Allows automatic updates (undoes *pin*).
 ```
+pint shims
+```
+Removes all shims files and recreates them.
+```
 pint subscribed
 ```
 Shows a list of databases, that you are subscribed to.
@@ -210,7 +214,7 @@ There are some meta-values:
   
 **type** - all downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is *standalone*, which means the downloaded file will be copied as is without unpacking.
 
-**base** - a base path inside an archive. To better explain this, I better tell, how this works. Once the archive is unpacked into a temporary directory, the script switches to that directory and retrieves a list of files. Then it goes line by line, until the **base** substring is found (it doesn't have to be a valid file or directory path, can be just a fragment). Once this substring is encountered, the working path changes to the directory, containing the file, where the search stopped. That's right, a *parent* directory of that file/dir will become the base path. Default **base** value is *.exe*, which means, that the first encountered directory with an .exe file will be used.
+**base** - a base path inside an archive. To better explain this, I better tell, how this works. Once the archive is unpacked into a temporary directory, the script switches to that directory and retrieves a list of files. Then it goes line by line, until the **base** substring is found (it doesn't have to be a valid file or directory path, can be just a fragment). Once this substring is encountered, the working path changes to the directory, containing the file, where the search stopped. *Parent* directory of that file/dir will become the base path. Default **base** value is *.exe*, which means, that the first encountered directory with an .exe file will be used.
 
 **keep** - Pint *replaces* contents of target directories, keeping files, listed in this parameter, intact. Typically, is used for configuration files. Must be a comma separated list of filenames/masks. Default value - \*.ini, \*.db.
 
@@ -218,12 +222,15 @@ There are some meta-values:
 
 **xd**, **xf** - comma-separated lists of directores and files (respectively), which should be left behind. These files will be neither removed from a target directory, nor copied from a temporary one. Pint uses Robocopy to copy files. These parameters are used as values for its /XD and /XF parameters. If **only** is set, these parameters are ignored.
 
-**noshim** - Pint automatically detects console applications and creates batch redirects for them (this is a temporary solution). Files, listed in **noshim**, will be skipped.
+**noshim** - Pint automatically detects console applications and creates shim files for them. Files, listed in **noshim**, will be skipped.
 
 Append *64* to a key to prefer it in a 64-bit system.  
 dist = http://example.com/archive.zip  
 dist64 = http://example.com/archive64.zip  
 If a key has no a 64-bit counterpart, base name will be used as a fallback.
+
+# Shims
+To enable automatic shim generation, download [shimgen.exe](https://github.com/chocolatey/chocolatey/blob/master/src/tools/shimgen.exe) from Chocolatey repository and put it into Pint directory.
 
 # Alternatives
 - [Scoop](https://github.com/lukesampson/scoop)

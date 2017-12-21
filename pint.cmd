@@ -74,6 +74,7 @@ function pint-usage
 		@('cleanup [<prefix>]', 'Delete archives from dist.'),
 		@('forget <dir>', 'Stop tracking of selected apps.'),
 		@('download <app>', 'Only download selected installers without unpacking them.'),
+		@('shims', 'Recreate all shim files.'),
 		@('subscribed', 'Show the list of databases, you are subscribed to.'),
 		@('subscribe <url>', 'Add a subscription to a package database.'),
 		@('unsubscribe <url>', 'Remove the URL from the list of subscriptions.')
@@ -90,6 +91,20 @@ function pint-usage
 
 function pint-shims([string]$dir, [string]$include, [string]$exclude, $delete)
 {
+	$shimgen = join-path $env:PINT "..\shimgen.exe"
+
+	if (!(is-file $shimgen)) {
+		if (!$dir) {
+			write-host "To use this command, download shimgen.exe from Chocolatey repository:`nhttps://github.com/chocolatey/choco/raw/master/src/chocolatey.resources/tools/shimgen.exe" -f yellow
+		}
+		return
+	}
+
+	if (!$dir) {
+		del (join-path $env:PINT_SHIM_DIR "*") -force
+		$dir = $env:PINT_APP_DIR
+	}
+
 	$params = @{
 		recurse = $true
 		force = $true
@@ -133,19 +148,18 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, $delete)
 			if ($subsystem -ne 3) { return }
 		}
 
-		$baseName = basename $_
-		$batch = join-path $env:PINT_SHIM_DIR "$baseName.bat"
+		$baseName = split-path $_ -leaf
+		$shim = join-path $env:PINT_SHIM_DIR $baseName
 
 		if ($delete) {
-			if (is-file $batch) {
-				del $batch
-				write-host "Removed $baseName.bat"
+			if (is-file $shim) {
+				del $shim
+				write-host "Removed" $baseName
 			}
 		} else {
 			$relpath = rvpa -relative -LiteralPath $relpath
-			$cmd = "`@echo off`n`"%~dp0$relpath`" %*`nexit /b %ERRORLEVEL%"
-			$cmd | out-file $batch -encoding ascii
-			write-host "Added $baseName.bat"
+			& $shimgen -p $relpath -o $shim -i $relpath | out-null
+			write-host "Added" $baseName
 		}
 	}
 }
@@ -209,7 +223,7 @@ function pint-get-app([string]$p)
 
 function pint-has($exe)
 {
-	is-file (join-path $env:PINT_SHIM_DIR "$exe.bat")
+	is-file (join-path $env:PINT_SHIM_DIR "$exe.exe")
 }
 
 function pint-unpack([string]$file, [string]$dir)
@@ -905,7 +919,7 @@ function pint-remove
 		if (is-dir $dir) {
 			write-host "Uninstalling $_..."
 			$app = pint-get-app $_
-			if ($app) { pint-shims $dir $app['shim'] $app['noshim'] 'delete' }
+			if ($app) { pint-shims $dir $app['shim'] $app['noshim'] $true }
 			rd -literalpath $dir -recurse -force
 			write-host $_ 'is removed.'
 		} else {
