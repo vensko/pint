@@ -74,6 +74,7 @@ function pint-usage
 		@('forget <dir>', 'Stop tracking of selected apps.'),
 		@('download <app>', 'Only download selected installers without unpacking them.'),
 		@('shims', 'Recreate all shim files.'),
+		@('test [<app>|<file.ini>]', 'Test app definitions.'),
 		@('subscribed', 'Show the list of databases, you are subscribed to.'),
 		@('subscribe <url>', 'Add a subscription to a package database.'),
 		@('unsubscribe <url>', 'Remove the URL from the list of subscriptions.')
@@ -1202,6 +1203,33 @@ function pint-cleanup
 		dir (join-path $env:PINT_DIST_DIR "$_*") -n -force | % {
 			write-host 'Removing' $_
 			del (join-path $env:PINT_DIST_DIR $_) -force -recurse
+		}
+	}
+}
+
+function pint-test([string]$subject)
+{
+	if ($subject) {
+		if ($subject.contains('.ini')) {
+			if (!$subject.contains(':')) { $subject = "$env:PINT\..\$subject" }
+			$list = [regex]::Matches([IO.File]::ReadAllText($subject), "(^|\n)\[(.+?)\]") |% {$_.groups[2].value}
+		} else {
+			$list = pint search $subject
+		}
+	} else {
+		$list = pint search
+	}
+
+	$list -split "`n", $null, 'SimpleMatch' |% {
+		$id = $_.trim()
+
+		try {
+			$info = pint-get-app-info $id
+			$url = pint-get-dist-link $info
+			$res = pint-make-request $url $false
+			write-host $id '-' $url -f green
+		} catch {
+			write-host $id '-' $_ -f red
 		}
 	}
 }
