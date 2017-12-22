@@ -16,7 +16,6 @@ if not defined PINT_PACKAGES_FILE_USER set "PINT_PACKAGES_FILE_USER=%~dp0package
 if not defined PINT_SRC_FILE set "PINT_SRC_FILE=%~dp0sources.list"
 if not defined PINT_USER_AGENT set "PINT_USER_AGENT=PintBot/1.0 (+https://github.com/vensko/pint)"
 
-SET "FINDSTR=%WINDIR%\system32\findstr.exe"
 SET "MSIEXEC=%WINDIR%\system32\msiexec.exe"
 SET "ROBOCOPY=%WINDIR%\system32\robocopy.exe"
 
@@ -261,7 +260,7 @@ function pint-unpack([string]$file, [string]$dir)
 			break
 		}
 		default {
-			if (($_ -eq '.exe') -and (& $env:FINDSTR /m /c:"Inno Setup" $file)) {
+			if (($_ -eq '.exe') -and (select-string -path $file -pattern 'Inno Setup')) {
 				if (!(pint-has 'innoextract')) {
 					write-host "Pint needs innoextract to unpack $filename, installing automatically..." -f white
 					pint-reinstall @('innoextract')
@@ -1184,23 +1183,15 @@ function pint-unpin
 	pint-pin @args
 }
 
-function pint-search($term)
+function pint-search([string]$term)
 {
-	$term = if ($term) { "\s*\[.*$term.*\]" } else { "\s*\[" }
-
-	$result = @()
+	$db = [IO.File]::ReadAllText((pint-db-file))
 
 	if (is-file $env:PINT_PACKAGES_FILE_USER) {
-		$result += (& $env:FINDSTR /I /B /R $term $env:PINT_PACKAGES_FILE_USER | sort)
+		$db += "`n" + [IO.File]::ReadAllText($env:PINT_PACKAGES_FILE_USER)
 	}
 
-	$result += (& $env:FINDSTR /I /B /R $term (pint-db-file) | sort)
-
-	if (!$result.count) {
-		write-host 'Nothing found.'
-	} else {
-		write-host ($result -join "`n").replace('[', '').replace(']', '')
-	}
+	[regex]::Matches($db, "(^|\n)\[(.*?$term.*?)\]", [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) |% {$_.groups[2].value}
 }
 
 function pint-cleanup
