@@ -6,32 +6,22 @@ rem PINT - Portable INsTaller
 rem https://github.com/vensko/pint
 
 SET "PINT=%~f0"
+set "PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.cmd"
 
 rem Set variables if they weren't overriden earlier
 if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0dist"
 if not defined PINT_APP_DIR set "PINT_APP_DIR=%~dp0apps"
+if not defined PINT_DEPS_DIR set "PINT_DEPS_DIR=%~dp0deps"
 if not defined PINT_SHIM_DIR set "PINT_SHIM_DIR=%PINT_APP_DIR%\.shims"
-if not defined PINT_PACKAGES_FILE set "PINT_PACKAGES_FILE=%~dp0packages.ini"
-if not defined PINT_PACKAGES_FILE_USER set "PINT_PACKAGES_FILE_USER=%~dp0packages.user.ini"
-if not defined PINT_SRC_FILE set "PINT_SRC_FILE=%~dp0sources.list"
 if not defined PINT_USER_AGENT set "PINT_USER_AGENT=PintBot/1.0 (+https://github.com/vensko/pint)"
-
-SET "MSIEXEC=%WINDIR%\system32\msiexec.exe"
-SET "ROBOCOPY=%WINDIR%\system32\robocopy.exe"
-SET "SHIMGEN=%~dp0shimgen.exe"
+if not defined PINT_DB set "PINT_DB=https://d.vensko.net/pint/packages.ini,%~dp0packages.user.ini"
+if not defined PINT_DB_CACHE set "PINT_DB_CACHE=%TEMP%\pint_packages.ini"
 
 path %PINT_SHIM_DIR%;%PATH%
 
-rem Hardcoded URLs
-set "PINT_PACKAGES=https://raw.githubusercontent.com/vensko/pint/master/packages.ini"
-set "PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.cmd"
-set "PINT_SEVENZIP_URL=http://www.7-zip.org/a/7z1701.msi"
-
 rem Start 64bit PowerShell even from 32bit command line
 SET "POWERSHELL=%SystemRoot%\sysnative\windowspowershell\v1.0\powershell.exe"
-if not exist "%POWERSHELL%" (
-	set "POWERSHELL=powershell"
-)
+if not exist "%POWERSHELL%" set "POWERSHELL=powershell"
 
 set "_args=%*"
 if defined _args set "_args=%_args:"=""""""%"
@@ -40,397 +30,89 @@ exit /b 0
 
 end Batch / begin PowerShell #>
 
+$DebugPreference = 'Continue'
+
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+[Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
 $global:httpMaxRedirects = 5
 $global:httpTimeout = 10000
-$DebugPreference = 'Continue'
-$global:ini = @{}
+$global:arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'x86') {32} else {64}
 
-function pint-usage
+$global:dependencies = @"
+[shimgen]
+dist = https://github.com/chocolatey/choco/raw/master/src/chocolatey.resources/tools/shimgen.exe
+type = standalone
+[xidel]
+dist = https://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel%200.9.6/xidel-0.9.6.win32.zip
+[innoextract]
+dist = http://constexpr.org/innoextract/
+link = .zip
+[7z]
+dist = http://www.7-zip.org/download.html
+link = .msi, !x64
+link64 = x64.msi
+"@
+
+function get-dependency([string]$id)
 {
-	write-host "PINT - Portable INsTaller`n" -f white
-	write-host "Usage:"
-	write-host "pint `<command`> `<parameters`>`n" -f yellow
-	write-host "Available commands:"
-
-	$commands = @(
-		@('self-update', 'Update Pint.'),
-		@('update', 'Download package databases and combine them into packages.ini.'),
-		@('search [<term>]', 'Search for an app in the database, or show all items.'),
-		@('installto <app> <dir> [<arch>] ', 'Install the app to the given directory.'),
-		@('install <app>', 'Install one or more apps to directories with the same names.'),
-		@('reinstall <dir>', 'Force reinstallation of the package.'),
-		@('list', 'Show all applications installed via Pint.'),
-		@('l', 'Show only names of installed applications.'),
-		@('outdated [<dir>]', 'Check for updates for all or some packages by your choice.'),
-		@('upgrade [<dir>]', 'Install updates for all or selected apps.'),
-		@('pin <dir>', 'Suppress updates for selected apps.'),
-		@('unpin <dir>', 'Allow updates for selected apps (undoes the pin command).'),
-		@('remove <dir>', 'Delete selected apps (this is equivalent to manual deletion).'),
-		@('purge <dir>', 'Delete selected apps AND their archives.'),
-		@('cleanup [<prefix>]', 'Delete archives from dist.'),
-		@('forget <dir>', 'Stop tracking of selected apps.'),
-		@('download <app>', 'Only download selected installers without unpacking them.'),
-		@('shims', 'Recreate all shim files.'),
-		@('test [<app>|<file.ini>]', 'Test app definitions.'),
-		@('subscribed', 'Show the list of databases, you are subscribed to.'),
-		@('subscribe <url>', 'Add a subscription to a package database.'),
-		@('unsubscribe <url>', 'Remove the URL from the list of subscriptions.')
-	)
-
-	foreach ($cmd in $commands) {
-		write-host $cmd[0].padright(24, ' ') -f green -nonewline
-		write-host $cmd[1]
-	}
-
-	write-host "`n`<app`> is a database ID, which can be seen via the search command."
-	write-host "`<dir`> is a path, relative to the 'apps' directory, as shown by the list command."
+	join-path $env:PINT_DEPS_DIR "$id\$id.exe"
 }
 
-function basename($f)
+function has-dependency([string]$id)
 {
-	[System.IO.Path]::GetFileNameWithoutExtension($f)
+	is-file (get-dependency $id)
 }
 
-function dirname($f)
+function install-dependency([string]$id)
 {
-	[System.IO.Path]::GetDirectoryName($f)
+	pint-force-install $id (join-path $env:PINT_DEPS_DIR $id) 32
 }
 
-function pint-shims([string]$dir, [string]$include, [string]$exclude, [bool]$delete)
+function get-ini-sections([string]$ini, [string]$term)
 {
-	if (!(is-file $env:SHIMGEN)) {
-		if (!$dir) {
-			write-host "To use this command, download shimgen.exe from Chocolatey repository:`nhttps://github.com/chocolatey/choco/raw/master/src/chocolatey.resources/tools/shimgen.exe" -f yellow
-		}
-		return
-	}
-
-	if (!$dir) {
-		del (join-path $env:PINT_SHIM_DIR '*') -force
-		$dir = $env:PINT_APP_DIR
-	}
-
-	$params = @{
-		recurse = $true
-		force = $true
-		name = $true
-		exclude = $exclude -split ',' |% {$_.trim()}  |? {$_}
-		ea = 0
-	}
-
-	if ($include) {
-		$includeArr = $include -split ',' |% {$_.trim()}  |? {$_}
-		$params['include'] = @('*.exe') + $includeArr
-	} else {
-		$params['filter'] = '*.exe'
-	}
-
-	ensure-dir $env:PINT_SHIM_DIR
-	cd $env:PINT_SHIM_DIR
-
-	dir $dir @params |% {
-		$exe = $_
-		$relpath = join-path $dir $_
-
-		if ([System.IO.Path]::GetExtension($_) -eq '.exe' -and (!$includeArr -or !($includeArr |? { $exe -like $_ }))) {
-			$subsystem = $null
-			try {
-				$fs = [IO.File]::OpenRead($relpath)
-				$br = new-object IO.BinaryReader $fs
-				if ($br.ReadUInt16() -ne 23117) { return }
-				$fs.Position = 0x3C
-				$fs.Position = $br.ReadUInt32()
-				$offset = $fs.Position
-				if ($br.ReadUInt32() -ne 17744) { return }
-				# $fs.Position += 0x14
-				# switch ($br.ReadUInt16()) { 0x10B { $arch = 32 } 0x20B { $arch = 64 } }
-				$fs.Position = $offset + 4 + 20 + 68
-				$subsystem = $br.ReadUInt16()
-			} catch {} finally {
-				if ($br -ne $null) { $br.Close() }
-				if ($fs -ne $null) { $fs.Close() }
-			}
-			if ($subsystem -ne 3) { return }
-		}
-
-		$baseName = [System.IO.Path]::GetFileName($_)
-		$shim = join-path $env:PINT_SHIM_DIR $baseName
-
-		if ($delete) {
-			if (is-file $shim) {
-				del $shim
-				write-host "Removed" $baseName
-			}
-		} else {
-			$relpath = rvpa -relative -LiteralPath $relpath
-			& $env:SHIMGEN -p $relpath -o $shim -i $relpath | out-null
-			write-host "Added" $baseName
-		}
-	}
+	[regex]::Matches($ini, "(^|\n)\[(.*?$term.*?)\]", [Text.RegularExpressions.RegexOptions]::IgnoreCase) |% {$_.groups[2].value}
 }
 
-function merge-hashtables
+function basename([string]$f)
 {
-    $output = @{}
-    foreach ($h in ($input + $args)) {
-        if ($h -is [Hashtable]) {
-            foreach ($k in $h.keys) {
-				$output[$k] = $h[$k]
-			}
-        }
-    }
-    $output
+	[IO.Path]::GetFileNameWithoutExtension($f)
 }
 
-function pint-get-app([string]$p)
+function dirname([string]$f)
 {
-	$p = pint-dir $p
-	if (is-file $p) {
-		$f = $p
-		$dir = dirname $f
-	} else {
-		$f = dir (join-path $p '*.pint') -n -force -ea 0 | select -first 1
-		if (!$f) { return }
-		$f = join-path $p $f
-		$dir = $p
-	}
-
-	$a = (basename $f).trim() -split ' '
-
-	$app = @{
-		id = $a[0]
-		dir = $dir
-		arch = get-arch
-		pinned = $false
-		version = ""
-		size = 0
-	}
-
-	$a = if ($a[1]) {$a[1..($a.count-1)]} else {@()}
-
-	if ($a) {
-		$a | % {
-			switch ($_) {
-				32 { $app['arch'] = 32 }
-				64 { $app['arch'] = 64 }
-				'pinned' { $app['pinned'] = $true }
-				{$_[0] -eq 'v' -and $_ -match "^v[0-9\.]+$"} { $app['version'] = $_.substring(1) }
-				default { if ($_ -match "^[0-9\.]+$") { $app['size'] = [int]$_ } }
-			}
-		}
-	}
-
-	$ini = pint-get-app-info $app['id'] $app['arch']
-	if (!$ini) { return }
-	$app = merge-hashtables $ini $app
-	$app
+	[IO.Path]::GetDirectoryName($f)
 }
 
-function pint-has($exe)
+function get-pad($array)
 {
-	is-file (join-path $env:PINT_SHIM_DIR "$exe.exe")
+	$max = $array | sort length -desc | select -first 1
+	$max.length + 2
 }
 
-function pint-unpack([string]$file, [string]$dir)
+function web-client
 {
-	if (!(is-file $file)) {
-		throw "Unable to find $file"
-	}
-
-	ensure-dir $dir
-
-	$filename = [System.IO.Path]::GetFileName($file)
-
-	write-host 'Unpacking' $filename
-
-	$fullPath = [System.IO.Path]::GetFullPath($file)
-	$sevenzip = pint-has '7z'
-
-	switch ([System.IO.Path]::GetExtension($file)) {
-		".msi" {
-			& $env:ComSpec /d /c "msiexec /a `"$fullPath`" /norestart /qn TARGETDIR=`"$dir`""
-			break
-		}
-		{!$sevenzip -and ($_ -eq '.zip')} {
-			try {
-				$shell = new-object -com Shell.Application
-				$zip = $shell.NameSpace($fullPath)
-				$shell.Namespace($dir).copyhere($zip.items(), 20)
-			} catch {
-				write-host "Pint needs 7-zip to unpack $filename, installing automatically..." -f white
-				$file = pint-dist-path '7-zip' (get-arch) ($env:PINT_SEVENZIP_URL -split '/')[-1]
-				(pint-wc).DownloadFile($env:PINT_SEVENZIP_URL, $file)
-				pint-file-install '7-zip' $file
-				& $env:ComSpec /d /c "7z x -y -aoa -o`"$dir`" `"$fullPath`"" | out-null
-			}
-			break
-		}
-		default {
-			if (($_ -eq '.exe') -and (select-string -path $file -pattern 'Inno Setup')) {
-				if (!(pint-has 'innoextract')) {
-					write-host "Pint needs innoextract to unpack $filename, installing automatically..." -f white
-					pint-reinstall @('innoextract')
-				}
-				& innoextract -s -c -p -d $dir $fullPath
-				break
-			}
-
-			if (!$sevenzip) {
-				write-host "Pint needs 7-zip to unpack $filename, installing automatically..." -f white
-				pint-reinstall @('7-zip')
-			}
-
-			& $env:ComSpec /d /c "7z x -y -aoa -o`"$dir`" `"$fullPath`"" | out-null
-		}
-	}
-
-	!$lastexitcode
+	$client = new-object Net.WebClient
+	$client.Headers['User-Agent'] = $env:PINT_USER_AGENT
+	$client
 }
 
-function pint-read-ini([string]$file, [string]$term)
+function is-file([string]$p)
 {
-	$result = @{}
-	if (!(is-file $file)) { return $null }
-
-	if (!$global:ini[$file]) {
-		$s = new-object System.IO.StreamReader $file
-		$global:ini[$file] = $s.readToEnd()
-		$s.close()
-	}
-
-	$section = '\[' + $term + '\]'
-	$text = ($global:ini[$file] -split $section, 2)[1]
-
-	if ($text) {
-		$lines = ($text -split "`n\[", 2)[0] -split "`n"
-
-		foreach ($line in $lines) {
-			$key, $val = $line -split '=', 2
-
-			if ($val -ne $null) {
-				$key = $key.trim()
-				if ($key[0] -ne ';') {
-					$result[$key] = $val.trim()
-				}
-			}
-		}
-	}
-
-	if ($result.keys.count) {$result} else {$null}
+	test-path $p -pathtype leaf
 }
 
-function pint-get-version([string]$dir)
+function is-dir([string]$p)
 {
-	try {
-		$v = (dir $dir -r -filter *.exe -ea stop | sort -property length -descending | select -first 1).VersionInfo.ProductVersion.trim()
-		if ($v.contains(',')) { $v = $v.replace(',', '.') }
-		if ($v.contains('-')) { $v = ($v -split '-', 2)[0] }
-		if (!($v -match "^[0-9\.]+$")) { return }
-		while ($v.substring($v.length-2, 2) -eq '.0') { $v = $v.substring(0, $v.length-2) }
-		$v
-	} catch {}
+	test-path $p -pathtype container
 }
 
-function get-arch
+function ensure-dir([string]$p)
 {
-	if ($env:PROCESSOR_ARCHITECTURE -eq 'x86') {32} else {64}
+	if (!(is-dir $p)) { md $p -ea stop | out-null }
 }
 
-function pint-get-app-info([string]$id, $arch)
-{
-	if (!$arch) { $arch = get-arch }
-
-	$ini = pint-read-ini $env:PINT_PACKAGES_FILE_USER $id
-	if (!$ini) { $ini = pint-read-ini (pint-db-file) $id }
-	if (!$ini) { return }
-
-	$res = @{}
-	$ini.keys | sort | % {
-		if ($_[-2]+$_[-1] -eq 64) {
-			if ($arch -eq 64) {
-				$res[$_.substring(0, $_.length-2)] = $ini[$_]
-			}
-		} else {
-			$res[$_] = $ini[$_]
-		}
-	}
-
-	if ($res.keys.count) { $res['arch'] = $arch }
-	if (!$res['dist']) { return }
-	$res
-}
-
-function pint-make-ftp-request([string]$url, [bool]$download)
-{
-	$req = [System.Net.WebRequest]::Create($url)
-	$req.Timeout = $global:httpTimeout
-	if (!$download) { $req.Method = [System.Net.WebRequestMethods+Ftp]::GetFileSize }
-	$req.GetResponse()
-}
-
-function pint-make-http-request([string]$url, [bool]$download, [bool]$disableAutoRedirect)
-{
-	try {
-		$req = [System.Net.WebRequest]::Create($url)
-		$req.Timeout = $global:httpTimeout
-		$req.UserAgent = $env:PINT_USER_AGENT
-		$req.AllowAutoRedirect = !$disableAutoRedirect
-		$req.MaximumAutomaticRedirections = $global:httpMaxRedirects
-		$req.Accept = '*/*'
-		$req.GetResponse()
-	} catch [System.Management.Automation.MethodInvocationException] {
-		if ($_.Exception.Message -match '\((4|5)[\d]{2}\)') {
-			throw $_.Exception.Message
-		}
-
-		$maxRedirects = $global:httpMaxRedirects
-		while ($true) {
-			if ($url.StartsWith('ftp:')) {
-				return pint-make-ftp-request $url $download
-			} else {
-				$res = pint-make-http-request $url $download $true
-				if ($res.headers['Location']) {
-					$res.close()
-					if ($maxRedirects-- -eq 0) {
-						throw "Exceeded limit of redirections retrieving $url"
-					}
-					$url = $res.headers['Location']
-					continue
-				} else {
-					return $res
-				}
-			}
-		}
-	}
-}
-
-function pint-make-request([string]$url, [bool]$download)
-{
-	[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
-
-	if ($url.StartsWith('ftp:')) {
-		$res = pint-make-ftp-request $url $download
-	} else {
-		$res = pint-make-http-request $url $download
-	}
-
-	if (!$res) {
-		throw "Failed to connect to $url"
-	}
-
-	if ([string]$res.ContentType.contains('text/html')) {
-		$res.close()
-		throw "$url responded with a HTML page."
-	}
-
-	if (!$download) { $res.close() }
-
-	$res
-}
-
-function string-to-xpath-simple($str, $rss)
+function string-to-xpath-simple([string]$str, [bool]$rss)
 {
 	$exts = @('.7z', '.zip', '.rar', '.paf.exe')
 
@@ -460,17 +142,253 @@ function string-to-xpath-simple($str, $rss)
 	) -join ' and '
 }
 
-function string-to-xpath($str, $rss)
+function string-to-xpath([string]$str, [bool]$rss)
 {
 	($str -split '\|' |% {
 		'(' + (string-to-xpath-simple $_ $rss) + ')'
 	}) -join ' or '
 }
 
+function get-pint([string]$dir)
+{
+	dir (pint-dir $dir) -ea 1 -force -filter *.pint | select -first 1
+}
+
+function pint-get-app([string]$p)
+{
+	$p = pint-dir $p
+	if (is-file $p) {
+		$f = $p
+		$dir = dirname $f
+	} else {
+		$f = dir (join-path $p '*.pint') -n -force -ea 0 | select -first 1
+		if (!$f) { return }
+		$f = join-path $p $f
+		$dir = $p
+	}
+
+	$a = (basename $f).trim() -split ' '
+
+	$app = @{
+		id = $a[0]
+		dir = $dir
+		arch = $global:arch
+		pinned = $false
+		version = ""
+		size = 0
+	}
+
+	$a = if ($a[1]) {$a[1..($a.count-1)]} else {@()}
+
+	if ($a) {
+		$a |% {
+			switch ($_) {
+				32 { $app['arch'] = 32 }
+				64 { $app['arch'] = 64 }
+				'pinned' { $app['pinned'] = $true }
+				{$_[0] -eq 'v' -and $_ -match "^v[0-9\.]+$"} { $app['version'] = $_.substring(1) }
+				default { if ($_ -match "^[0-9\.]+$") { $app['size'] = [int]$_ } }
+			}
+		}
+	}
+
+	$ini = pint-get-app-info $app['id'] $app['arch']
+	if (!$ini) { return }
+	$app.keys |% { $ini[$_] = $app[$_] }
+	$ini
+}
+
+function pint-unpack([string]$file, [string]$dir)
+{
+	if (!(is-file $file)) {
+		throw "Unable to find $file"
+	}
+
+	ensure-dir $dir
+
+	$filename = [IO.Path]::GetFileName($file)
+
+	write-host 'Unpacking' $filename
+
+	$fullPath = [IO.Path]::GetFullPath($file)
+	$sevenzip = get-dependency '7z'
+
+	switch ([IO.Path]::GetExtension($file).ToLower()) {
+		'.msi' {
+			& $env:ComSpec /d /c "msiexec /a `"$fullPath`" /norestart /qn TARGETDIR=`"$dir`""
+			break
+		}
+		{!(is-file $sevenzip) -and ($_ -eq '.zip')} {
+			try {
+				$shell = new-object -com Shell.Application
+				$zip = $shell.NameSpace($fullPath)
+				$shell.Namespace($dir).copyhere($zip.items(), 20)
+			} catch {
+				write-host "Pint needs 7-zip to unpack $filename, installing automatically..." -f white
+				install-dependency '7z'
+				& $env:ComSpec /d /c "`"$sevenzip`" x -y -aoa -o`"$dir`" `"$fullPath`"" | out-null
+			}
+			break
+		}
+		default {
+			if (($_ -eq '.exe') -and (select-string -path $file -pattern 'Inno Setup')) {
+				if (!(has-dependency 'innoextract')) {
+					write-host "Pint needs innoextract to unpack $filename, installing automatically..." -f white
+					install-dependency 'innoextract'
+				}
+				& (get-dependency 'innoextract') -s -c -p -d $dir $fullPath
+				break
+			}
+
+			if (!(is-file $sevenzip)) {
+				write-host "Pint needs 7-zip to unpack $filename, installing automatically..." -f white
+				install-dependency '7z'
+			}
+
+			& $env:ComSpec /d /c "`"$sevenzip`" x -y -aoa -o`"$dir`" `"$fullPath`"" | out-null
+		}
+	}
+
+	!$lastexitcode
+}
+
+function pint-read-ini([string]$term)
+{
+	$result = @{}
+	$db = pint-db
+
+	if (!$db.contains('[' + $term + ']')) {
+		return $null
+	}
+
+	$text = ($db -split '\[' + $term + '\]')[-1]
+
+	if ($text) {
+		$lines = ($text -split "`n\[", 2)[0] -split "`n"
+
+		$lines |% {
+			$key, $val = $_ -split '=', 2
+
+			if ($val -ne $null) {
+				$key = $key.trim()
+				if ($key[0] -ne ';') {
+					$result[$key] = $val.trim()
+				}
+			}
+		}
+	}
+
+	if ($result.keys.count) {$result} else {$null}
+}
+
+function pint-get-version([string]$dir)
+{
+	try {
+		$v = (dir $dir -r -filter *.exe -ea stop | sort -property length -descending | select -first 1).VersionInfo.ProductVersion.trim()
+		if ($v.contains(',')) { $v = $v.replace(',', '.') }
+		if ($v.contains('-')) { $v = ($v -split '-', 2)[0] }
+		if (!($v -match "^[0-9\.]+$")) { return }
+		while ($v.substring($v.length-2, 2) -eq '.0') { $v = $v.substring(0, $v.length-2) }
+		$v
+	} catch {}
+}
+
+function pint-get-app-info([string]$id, [string]$arch)
+{
+	if (!$arch) { $arch = $global:arch }
+
+	$ini = pint-read-ini $id
+	if (!$ini) { return }
+
+	$res = @{}
+	$ini.keys | sort |% {
+		if ($_[-2]+$_[-1] -eq 64) {
+			if ($arch -eq 64) {
+				$res[$_.substring(0, $_.length-2)] = $ini[$_]
+			}
+		} else {
+			$res[$_] = $ini[$_]
+		}
+	}
+
+	if ($res.keys.count) { $res['arch'] = $arch }
+	if (!$res['dist']) { return }
+	$res
+}
+
+function pint-make-ftp-request([string]$url, [bool]$download)
+{
+	$req = [Net.WebRequest]::Create($url)
+	$req.Timeout = $global:httpTimeout
+	if (!$download) { $req.Method = [Net.WebRequestMethods+Ftp]::GetFileSize }
+	$req.GetResponse()
+}
+
+function pint-make-http-request([string]$url, [bool]$download, [bool]$disableAutoRedirect)
+{
+	try {
+		$req = [Net.WebRequest]::Create($url)
+		$req.Timeout = $global:httpTimeout
+		$req.UserAgent = $env:PINT_USER_AGENT
+		$req.AllowAutoRedirect = !$disableAutoRedirect
+		$req.MaximumAutomaticRedirections = $global:httpMaxRedirects
+		$req.Accept = '*/*'
+		if (!$url.contains('sourceforge.net')) {
+			$req.Referer = $url
+		}
+		$req.GetResponse()
+	} catch [Management.Automation.MethodInvocationException] {
+		if ($_.Exception.Message -match '\((4|5)[\d]{2}\)') {
+			throw $_.Exception.Message
+		}
+
+		$maxRedirects = $global:httpMaxRedirects
+		while ($true) {
+			if ($url.StartsWith('ftp:')) {
+				return pint-make-ftp-request $url $download
+			} else {
+				$res = pint-make-http-request $url $download $true
+				if ($res.headers['Location']) {
+					$res.close()
+					if ($maxRedirects-- -eq 0) {
+						throw "Exceeded limit of redirections retrieving $url"
+					}
+					$url = $res.headers['Location']
+					continue
+				} else {
+					return $res
+				}
+			}
+		}
+	}
+}
+
+function pint-make-request([string]$url, [bool]$download)
+{
+	if ($url.StartsWith('ftp:')) {
+		$res = pint-make-ftp-request $url $download
+	} else {
+		$res = pint-make-http-request $url $download
+	}
+
+	if (!$res) {
+		throw "Failed to connect to $url"
+	}
+
+	if (([string]$res.ContentType).contains('text/html')) {
+		$res.close()
+		throw "$url responded with a HTML page."
+	}
+
+	if (!$download) { $res.close() }
+
+	$res
+}
+
 function pint-get-dist-link([Hashtable]$info, [bool]$verbose)
 {
 	if (!$info['dist']) {
-		return
+		throw "No dist key."
 	}
 
 	$dist = $info['dist']
@@ -494,22 +412,18 @@ function pint-get-dist-link([Hashtable]$info, [bool]$verbose)
 	}
 
 	if ($link) {
-		if (!(pint-has 'xidel')) {
+		if (!(has-dependency 'xidel')) {
 			write-host "Pint needs Xidel to be able to extract links, installing automatically..." -f white
-			pint-reinstall @('xidel')
+			install-dependency 'xidel'
 		}
 
 		if (!$link.contains('$json') -and !($link.contains('json('))) {
 			if (!$link.contains('//')) {
 				$link = string-to-xpath $link $rss
 				$link = if ($rss) {"//link[$link]"} else {"//a[$link]"}
-
-				if ($dist.contains('fosshub.com/')) {
-					$link += '/concat("https://www.fosshub.com/gensLink", @data, "/", @cacheid)'
-				}
 			}
 
-			if (!$dist.contains('fosshub.com/') -and $link.contains('/a')) {
+			if ($link.contains('/a')) {
 				$link += '/resolve-uri(normalize-space(@href), base-uri())'
 			}
 		}
@@ -544,7 +458,7 @@ function pint-get-dist-link([Hashtable]$info, [bool]$verbose)
 			$proxy = "--proxy=`"$proxyAddr`""
 		}
 
-		$dist = & $env:ComSpec /d /c "$out xidel $method $proxy --header=`"Referer: $dist`" --user-agent=`"$($env:PINT_USER_AGENT)`" `"$dist`" $follow $quiet --extract `"($link)[1]`""
+		$dist = & $env:ComSpec /d /c "$out `"$(get-dependency 'xidel')`" $method $proxy --header=`"Referer: $dist`" --user-agent=`"$($env:PINT_USER_AGENT)`" `"$dist`" $follow $quiet --extract `"($link)[1]`""
 
 		if ($lastexitcode -or !$dist -or !$dist.contains('://')) {
 			$dist = $null
@@ -553,8 +467,6 @@ function pint-get-dist-link([Hashtable]$info, [bool]$verbose)
 
 			if ($info['dist'].contains('filehippo.com/')) {
 				$dist = 'http://filehippo.com' + ($dist -split '=', 2)[1]
-			} elseif ($info['dist'].contains('fosshub.com/')) {
-				$dist = (pint-wc).DownloadString($dist).trim()
 			}
 		}
 	}
@@ -579,17 +491,17 @@ function pint-is-app-outdated([Hashtable]$app, [bool]$download)
 	}
 }
 
-function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
+function pint-download-file([Net.WebResponse]$res, [string]$targetFile)
 {
 	ensure-dir (dirname $targetFile)
 
-	$totalLength = [System.Math]::Floor($res.ContentLength / 1024)
+	$totalLength = [Math]::Floor($res.ContentLength / 1024)
 
 	write-host "Downloading $($res.ResponseUri) ($("{0:N2} MB" -f ($totalLength / 1024)))"
 
 	$remoteName = pint-get-remote-name $res
 	$rs = $res.GetResponseStream()
-	$fs = new-object System.IO.FileStream $targetFile, 'Create'
+	$fs = new-object IO.FileStream $targetFile, 'Create'
 	$buffer = new-object byte[] 512KB
 	$count = $rs.Read($buffer, 0, $buffer.length)
 	$downloaded = $count
@@ -600,7 +512,7 @@ function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
 		$count = $rs.Read($buffer, 0, $buffer.length)
 		if ($progressBar) {
 			$downloaded += $count
-			write-progress -activity "Downloading file $remoteName" -status "Downloaded ($([System.Math]::Floor($downloaded / 1024))K of $($totalLength)K): " -PercentComplete ((([System.Math]::Floor($downloaded / 1024)) / $totalLength)  * 100)
+			write-progress -activity "Downloading file $remoteName" -status "Downloaded ($([Math]::Floor($downloaded / 1024))K of $($totalLength)K): " -PercentComplete ((([Math]::Floor($downloaded / 1024)) / $totalLength)  * 100)
 		}
 	}
 
@@ -616,10 +528,15 @@ function pint-download-file([System.Net.WebResponse]$res, [string]$targetFile)
 
 	$res.Close()
 
-	$targetFile
+	if (!$res.ContentLength -or $res.ContentLength -eq (new-object IO.FileInfo $targetFile).length) {
+		$targetFile
+	} else {
+		del $targetFile -force
+		throw "Unable to complete download from $($res.ResponseUri)"
+	}
 }
 
-function pint-get-remote-name([System.Net.WebResponse]$res)
+function pint-get-remote-name([Net.WebResponse]$res)
 {
 	if (($h = $res.headers['Content-Disposition']) -and $h.contains('=')) {
 		$name = ($h -split '=', 2)[1].replace('"', '').trim()
@@ -630,14 +547,22 @@ function pint-get-remote-name([System.Net.WebResponse]$res)
 	($name -split '\?', 2)[0]
 }
 
-function pint-dist-path($id, $arch, $name)
+function distdir([string]$file)
 {
-	join-path $env:PINT_DIST_DIR "$id--$arch--$name"
+	join-path $env:PINT_DIST_DIR $file
 }
 
-function pint-download-app($id, $arch, $res)
+function pint-dir([string]$path)
 {
-	if ($res -isnot [System.Net.WebResponse]) {
+	if (![IO.Path]::isPathRooted($path)) {
+		$path = join-path $env:PINT_APP_DIR $path
+	}
+	$path
+}
+
+function pint-download-app([string]$id, [string]$arch, $res)
+{
+	if ($res -isnot [Net.WebResponse]) {
 		if (!($info = pint-get-app-info $id $arch) -or !($url = pint-get-dist-link $info $true)) {
 			throw "Unable to find $id in the database."
 		}
@@ -646,13 +571,13 @@ function pint-download-app($id, $arch, $res)
 		$res = pint-make-request $url $true
 	}
 
-	if (!$arch) { $arch = get-arch }
+	if (!$arch) { $arch = $global:arch }
 	$name = pint-get-remote-name $res
 
-	$file = pint-dist-path $id $arch $name
+	$file = distdir "$id--$arch--$name"
 
 	if (is-file $file) {
-		if ((new-object System.IO.FileInfo $file).length -eq $res.ContentLength) {
+		if ((new-object IO.FileInfo $file).length -eq $res.ContentLength) {
 			$res.close()
 			write-host 'The local file has the same size as the remote one, skipping redownloading.'
 			return $file
@@ -665,30 +590,17 @@ function pint-download-app($id, $arch, $res)
 	}
 }
 
-function pint-force-install([string]$id, [string]$dir, $arch)
+function pint-force-install([string]$id, [string]$dir, [string]$arch)
 {
 	$file = pint-download-app $id $arch
 	if (!$file) { return }
 	pint-file-install $id $file $dir $arch
 }
 
-function pint-dir([string]$path)
-{
-	if (![System.IO.Path]::isPathRooted($path)) {
-		$path = join-path $env:PINT_APP_DIR $path
-	}
-	$path
-}
-
-function pint-dir-tracked([string]$path)
-{
-	[bool](dir (pint-dir $path) -n -force -ea 0 -filter *.pint)
-}
-
-function pint-file-install([string]$id, [string]$file, $destDir, $arch)
+function pint-file-install([string]$id, [string]$file, [string]$destDir, [string]$arch)
 {
 	if (!(is-file $file)) {
-		throw [System.IO.FileNotFoundException] "Unable to find $file"
+		throw [IO.FileNotFoundException] "Unable to find $file"
 	}
 
 	if (!$destDir) { $destDir = $id }
@@ -703,7 +615,7 @@ function pint-file-install([string]$id, [string]$file, $destDir, $arch)
 	write-host 'Installing' $id 'to' $destDir
 
 	if ($info['type'] -eq 'standalone') {
-		copy -LiteralPath $file (join-path $destDir "$id.exe") -force
+		copy -literalpath $file (join-path $destDir "$id.exe") -force
 	} else {
 		$tempDir = join-path $env:TEMP "pint-$id-$(get-random)"
 		ensure-dir $tempDir
@@ -713,7 +625,7 @@ function pint-file-install([string]$id, [string]$file, $destDir, $arch)
 		cd $tempDir
 
 		if ($tempDir -ne $pwd) {
-			throw "Unable to use the temporary directory $tempDir"
+			throw "Unable to use $tempDir as a temporary directory."
 		}
 
 		$base = if ($info['base']) {$info['base']} else {'.exe'}
@@ -725,7 +637,11 @@ function pint-file-install([string]$id, [string]$file, $destDir, $arch)
 			}
 		}
 
-		$keep = if ($info['keep'] -ne $null) {$info['keep'] -split ',' |% {$_.trim()}  |? {$_} } else {@('*.ini','*.db')}
+		$keep = if ($info['keep'] -ne $null) {
+			$info['keep'] -split ',' |% {$_.trim()} |? {$_}
+		} else {
+			@('*.ini','*.db')
+		}
 
 		$params = @{
 			include = $keep
@@ -735,7 +651,7 @@ function pint-file-install([string]$id, [string]$file, $destDir, $arch)
 			ea = 0
 		}
 
-		dir $destDir @params | % {
+		dir $destDir @params |% {
 			$p = join-path $destDir $_
 			if (is-dir $p) {
 				ensure-dir "$pwd\$_"
@@ -757,9 +673,9 @@ function pint-file-install([string]$id, [string]$file, $destDir, $arch)
 				ea = 0
 			}
 
-			dir $destDir @params | % { del "$destDir\$_" -force -recurse }
+			dir $destDir @params |% { del "$destDir\$_" -force -recurse }
 
-			dir $pwd @params | % {
+			dir $pwd @params |% {
 				$p = join-path $pwd $_
 				if (is-dir $p) {
 					ensure-dir "$destDir\$_"
@@ -776,7 +692,7 @@ function pint-file-install([string]$id, [string]$file, $destDir, $arch)
 			& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /E /PURGE /NJS /NJH /NFL /NDL /NC /NP /NS /R:2 /W:2 /XO /FFT /XF $xf /XD $xd" | out-null
 
 			if ($lastexitcode -gt 7) {
-				write-host "Detected errors while copying from $pwd with Robocopy ($lastexitcode)."
+				write-host "Detected errors while copying from $pwd with Robocopy (code $lastexitcode)."
 			}
 		}
 
@@ -793,113 +709,107 @@ function pint-file-install([string]$id, [string]$file, $destDir, $arch)
 		$info['arch'] = $arch
 	}
 
-	$pintFile = (@($id, $version, $info['arch'], (new-object System.IO.FileInfo $file).length) | where {$_}) -join " "
+	$pintFile = (@($id, $version, $info['arch'], (new-object IO.FileInfo $file).length) |? {$_}) -join ' '
 	$pintFile = join-path $destDir "$pintFile.pint"
 
 	del (join-path $destDir '*.pint') -force
 	$pintFile = ni $pintFile -type file -force
 	$pintFile.attributes = 'Hidden'
 
-	pint-shims $destDir $info['shim'] $info['noshim'] | out-null
+	if ($destDir.StartsWith($env:PINT_APP_DIR)) {
+		pint-shims $destDir $info['shim'] $info['noshim'] | out-null
+	}
 }
 
-function max-length($array)
+function pint-db
 {
-	$max = 0
+	$db = $global:dependencies
 
-	$array | % {
-		if ($_.length -gt $max) {
-			$max = $_.length
+	if (!($env:PINT_DB).contains('://')) {
+		$env:PINT_DB -split ',' |% {
+			$db += "`n" + [IO.File]::ReadAllText($_.trim())
 		}
+		return $db
 	}
 
-	$max
-}
+	$cache = $env:PINT_DB_CACHE
+	$timespan = new-timespan -days 1
 
-function pint-src-file
-{
-	if (!(pint-exists $env:PINT_SRC_FILE)) {
-		$env:PINT_PACKAGES | out-file $env:PINT_SRC_FILE -encoding ascii
+	if ($env:PINT_DEV -or !(is-file $cache) -or (get-date) - (get-item $cache).LastWriteTime -gt $timespan) {
+		$env:PINT_DB -split ',' |% {
+			$db += "`n"
+			$src = $_.trim()
+			if ($src.contains('://')) {
+				$db += (web-client).DownloadString($src)
+			} elseif (is-file $src) {
+				$db += [IO.File]::ReadAllText($src)
+			}
+		}
+		$db | out-file $cache
+		return $db
 	}
-	$env:PINT_SRC_FILE
-}
 
-function pint-db-file
-{
-	if (!(pint-exists $env:PINT_PACKAGES_FILE)) { pint-update }
-	$env:PINT_PACKAGES_FILE
+	[IO.File]::ReadAllText($cache)
 }
-
-function pint-wc
-{
-	$client = new-object System.Net.WebClient
-	$client.Headers['User-Agent'] = $env:PINT_USER_AGENT
-	$client
-}
-
-function is-file($p)
-{
-	test-path $p -pathtype leaf
-}
-
-function is-dir($p)
-{
-	test-path $p -pathtype container
-}
-
-function ensure-dir($p)
-{
-	if (!(is-dir $p)) { md $p -ea stop | out-null }
-}
-
-############## Controllers
 
 function pint-reinstall
 {
-	if (!$args.count) { write-host 'Set a directory to reinstall.'; return }
+	if (!$args.count) {
+		write-host 'Set a directory to reinstall.'
+		return
+	}
 
-	$args | % {
+	$args |% {
 		try {
-			if ([bool](dir (pint-dir $_) -n -force -ea 0 -filter *pinned*.pint)) {
-				throw "$_ is pinned, use unpin to allow this action."
-			}
-
 			if ($app = pint-get-app $_) {
+				if ($app['pinned']) {
+					throw "$_ is pinned, use unpin to allow this action."
+				}
 				pint-force-install $app['id'] $app['dir'] $app['arch']
 			} else {
 				pint-force-install $_ $_
 			}
 		} catch {
-			write-host $_ -f yellow
+			write-warning $_
 		}
 	}
 }
 
 function pint-download
 {
-	if (!$args.count) { write-host 'Set an ID to download.'; return }
+	if (!$args.count) {
+		write-warning 'Set an ID to download.'
+		return
+	}
 
-	$args | % {
+	$args |% {
 		try {
 			pint-download-app $_ | out-null
 		} catch {
-			write-host $_ -f yellow
+			write-warning $_
 		}
 	}
 }
 
 function pint-install
 {
-	if (!$args.count) { write-host 'Set an ID to install.'; return }
-	$args | % { pint-installto $_ $_ }
+	if (!$args.count) {
+		write-warning 'Set an ID to install.'
+		return
+	}
+
+	$args |% { pint-installto $_ $_ }
 }
 
 function pint-installto([string]$id, [string]$dir, $arch)
 {
 	try {
-		if (!$id -or !$dir) { write-host 'Set an ID and a destination directory.'; return }
+		if (!$id -or !$dir) {
+			write-host 'Set an ID and a destination directory.'
+			return
+		}
 
-		if ([bool](dir (pint-dir $dir) -name -force -ea 0)) {
+		if ((dir (pint-dir $dir) -name -force -ea 0)) {
 			write-host (pint-dir $dir) 'is not empty.'
 			$confirm = read-host -prompt 'Do you want to REPLACE its contents? [Y/N] '
 			if ($confirm.trim().ToUpper() -ne 'Y') { return }
@@ -907,22 +817,28 @@ function pint-installto([string]$id, [string]$dir, $arch)
 
 		pint-force-install $id $dir $arch
 	} catch {
-		write-host $_ -f yellow
+		write-warning $_
 	}
 }
 
 function pint-purge
 {
-	if (!$args.count) { write-host 'Set a directory to purge.'; return }
+	if (!$args.count) {
+		write-warning 'Set a directory to purge.'
+		return
+	}
 	pint-remove @args
-	$args | % { del (join-path $env:PINT_DIST_DIR "$_--*.*") -force }
+	$args |% { del (distdir "$_--*.*") -force }
 }
 
 function pint-remove
 {
-	if (!$args.count) { write-host 'Set a directory to remove.'; return }
+	if (!$args.count) {
+		write-warning 'Set a directory to remove.'
+		return
+	}
 
-	$args | % {
+	$args |% {
 		$dir = pint-dir $_
 
 		if (is-dir $dir) {
@@ -942,9 +858,9 @@ function pint-outdated
 	write-host 'Checking for updates...'
 
 	if (!$args.count) { $args = pint-l }
-	$pad = (max-length $args) + 2
+	$pad = get-pad $args
 
-	$args | % {
+	$args |% {
 		write-host $_.padright($pad, ' ') -nonewline
 
 		try {
@@ -976,9 +892,9 @@ function pint-upgrade
 	write-host 'Checking for updates...'
 
 	if (!$args.count) { $args = pint-l }
-	$pad = (max-length $args) + 2
+	$pad = get-pad $args
 
-	$args | % {
+	$args |% {
 		write-host $_.padright($pad, ' ') -nonewline
 
 		try {
@@ -986,6 +902,11 @@ function pint-upgrade
 
 			if (!$app) {
 				write-host 'NOT FOUND' -f red
+				return
+			}
+
+			if ($app['pinned']) {
+				write-host 'PINNED' -f yellow
 				return
 			}
 
@@ -1014,15 +935,15 @@ function pint-upgrade
 
 function pint-l
 {
-	dir $env:PINT_APP_DIR -n -r -force -filter *.pint | % { dirname $_ }
+	dir $env:PINT_APP_DIR -n -r -force -filter *.pint |% { dirname $_ }
 }
 
-function pint-list($detailed)
+function pint-list
 {
 	$table = @()
 	$fso = new-object -com Scripting.FileSystemObject
 
-	dir $env:PINT_APP_DIR -n -r -force -filter *.pint | % {
+	dir $env:PINT_APP_DIR -n -r -force -filter *.pint |% {
 		$dir = dirname $_
 		$name = basename $_
 		$id = ($name -split ' ', 2)[0]
@@ -1040,178 +961,150 @@ function pint-list($detailed)
 	$table | ft Directory,ID,Version,Size,Arch -autosize
 }
 
-function pint-subscribe($url)
-{
-	if (!$url) {
-		write-host 'Set an URL to subscribe to.' -f red; return
-	}
-
-	$url = $url.trim()
-	$srcFile = pint-src-file
-	$list = [IO.File]::ReadAllLines($srcFile)
-
-	if ($list -contains $url) {
-		write-host 'This URL is already registered.' -f red
-		return
-	} elseif (!$url.StartsWith('http://') -and !$url.StartsWith('https://')) {
-		write-host 'Incorrect URL.' -f red
-		return
-	}
-
-	@($url) + $list | out-file $srcFile -en ascii
-
-	write-host 'Registered' $url
-	write-host "`nYour new source list:"
-	pint-subscribed
-}
-
-function pint-unsubscribe($url)
-{
-	if (!$url) {
-		write-host 'Set an URL to unsubscribe from.' -f red; return
-	}
-
-	$url = $url.trim()
-	$srcFile = pint-src-file
-	$list = [System.Collections.ArrayList]([IO.File]::ReadAllLines($srcFile))
-
-	if (!($list -contains $url)) {
-		write-host 'This URL is not registered.' -f red; return
-	}
-
-	$list.Remove($url)
-
-	$list | out-file $srcFile -en ascii
-
-	write-host 'Unregistered' $url
-	write-host "`nYour new source list:"
-	pint-subscribed
-}
-
-function pint-subscribed
-{
-	write-host ([IO.File]::ReadAllText((pint-src-file)).trim())
-}
-
-function pint-forget
-{
-	$args | % {
-		del (join-path (pint-dir $_) '*.pint') -force -ea 0
-		write-host $_ 'is no longer managed by Pint.'
-	}
-}
-
-function pint-exists($file)
-{
-	((is-file $file) -and (new-object System.IO.FileInfo($file)).length -ne 0)
-}
-
 function pint-self-update
 {
 	write-host 'Fetching' $env:PINT_SELF_URL
 
-	$res = (pint-wc).DownloadString($env:PINT_SELF_URL)
+	$res = (web-client).DownloadString($env:PINT_SELF_URL)
 
 	if ($res -and $res.contains('PINT - Portable INsTaller')) {
 		$res | out-file $env:PINT -encoding ascii
-		write-host 'Pint was updated to the latest version.'
+		write-host 'Pint was updated to the latest version.' -f green
 	} else {
-		write-host 'Self-update failed!'
+		write-host 'Self-update failed!' -f red
 		exit 1
 	}
 }
 
-function pint-db-update
+function pint-forget
 {
-	write-host 'Updating the database...'
-	$wc = pint-wc
-	$result = ''
-
-	[IO.File]::ReadAllLines((pint-src-file)) |% {
-		if (!($_ = $_.trim()) -or $_[0] -eq ';') { return }
-
-		write-host $_ -nonewline
-
-		if ($res = $wc.DownloadString($_)) {
-			write-host "`r$_" -f green
-			$result += $res.trim()
-		} else {
-			write-host "`r$_" -f red
+	$args |% {
+		try {
+			get-pint $_ | del -force
+			write-host $_ 'is no longer managed by Pint.'
+		} catch {
+			write-warning $_
 		}
 	}
-
-	$result | out-file $env:PINT_PACKAGES_FILE -encoding ascii
-
-	write-host 'Done.'
-}
-
-function pint-update
-{
-	pint-self-update
-	pint-db-update
 }
 
 function pint-pin
 {
 	$args |% {
-		$app = $_
-		$dir = pint-dir $_
-
-		if (!($files = dir $dir -ea 0 -n -force -filter *.pint)) {
-			write-host $_ 'is not managed by Pint, try to reinstall it.' -f yellow; return
-		}
-
-		$s = ' pinned'
-		$p = ''
-
-		if ($env:PINT_UNPIN) {
-			$s = ''
-			$p = 'un'
-		}
-
-		$files |% {
-			$n = (basename $_).replace(' pinned', '') + $s
-			ren (join-path $dir $_) "$n.pint" -force
-			write-host $app ('is ' + $p + 'pinned.')
+		try {
+			get-pint $_ | ren -NewName { $_.Name -replace ' pinned','' -replace '.pint$',' pinned.pint' }
+			write-host $_ 'is pinned.'
+		} catch {
+			write-warning $_
 		}
 	}
 }
 
 function pint-unpin
 {
-	$env:PINT_UNPIN = $true
-	pint-pin @args
+	$args |% {
+		try {
+			get-pint $_ | ren -NewName { $_.Name -replace ' pinned','' }
+			write-host $_ 'is unpinned.'
+		} catch {
+			write-warning $_
+		}
+	}
 }
 
 function pint-search([string]$term)
 {
-	$db = [IO.File]::ReadAllText((pint-db-file))
-
-	if (is-file $env:PINT_PACKAGES_FILE_USER) {
-		$db += "`n" + [IO.File]::ReadAllText($env:PINT_PACKAGES_FILE_USER)
-	}
-
-	[regex]::Matches($db, "(^|\n)\[(.*?$term.*?)\]", [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) |% {$_.groups[2].value}
+	get-ini-sections (pint-db) $term
 }
 
 function pint-cleanup
 {
-	if (!$args.count) { $args = @('') }
+	dir (distdir '*') |% {
+		write-host 'Removing' $_.Name
+		del -r $_
+	}
+}
 
-	$args | % {
-		dir (join-path $env:PINT_DIST_DIR "$_*") -n -force | % {
-			write-host 'Removing' $_
-			del (join-path $env:PINT_DIST_DIR $_) -force -recurse
+function pint-shims([string]$dir, [string]$include, [string]$exclude, [bool]$delete)
+{
+	if (!(has-dependency 'shimgen')) {
+		install-dependency 'shimgen'
+	}
+
+	if (!$dir) {
+		del (join-path $env:PINT_SHIM_DIR '*') -force
+		$dir = $env:PINT_APP_DIR
+	}
+
+	$params = @{
+		recurse = $true
+		force = $true
+		name = $true
+		exclude = $exclude -split ',' |% {$_.trim()} |? {$_}
+		ea = 0
+	}
+
+	if ($include) {
+		$includeArr = $include -split ',' |% {$_.trim()} |? {$_}
+		$params['include'] = @('*.exe') + $includeArr
+	} else {
+		$params['filter'] = '*.exe'
+	}
+
+	ensure-dir $env:PINT_SHIM_DIR
+	cd $env:PINT_SHIM_DIR
+
+	dir $dir @params |% {
+		$exe = $_
+		$relpath = join-path $dir $_
+
+		if ([IO.Path]::GetExtension($_) -eq '.exe' -and (!$includeArr -or !($includeArr |? { $exe -like $_ }))) {
+			$subsystem = $null
+			try {
+				$fs = [IO.File]::OpenRead($relpath)
+				$br = new-object IO.BinaryReader $fs
+				if ($br.ReadUInt16() -ne 23117) { return }
+				$fs.Position = 0x3C
+				$fs.Position = $br.ReadUInt32()
+				$offset = $fs.Position
+				if ($br.ReadUInt32() -ne 17744) { return }
+				# $fs.Position += 0x14
+				# switch ($br.ReadUInt16()) { 0x10B { $arch = 32 } 0x20B { $arch = 64 } }
+				$fs.Position = $offset + 4 + 20 + 68
+				$subsystem = $br.ReadUInt16()
+			} catch {} finally {
+				if ($br -ne $null) { $br.Close() }
+				if ($fs -ne $null) { $fs.Close() }
+			}
+			if ($subsystem -ne 3) { return }
+		}
+
+		$baseName = [IO.Path]::GetFileName($_)
+		$shim = join-path $env:PINT_SHIM_DIR $baseName
+
+		if ($delete) {
+			if (is-file $shim) {
+				del $shim
+				write-host "Removed" $baseName
+			}
+		} else {
+			$relpath = rvpa -relative -literalpath $relpath
+			& (get-dependency 'shimgen') -p $relpath -o $shim -i $relpath | out-null
+			write-host "Added" $baseName
 		}
 	}
 }
 
 function pint-test([string]$subject)
 {
+	$env:PINT_DEV = $true
+
 	if ($subject) {
-		if ($subject.contains('.ini')) {
+		if ($subject.contains('://')) {
+			$list = get-ini-sections (web-client).DownloadString($subject)
+		} elseif ($subject.contains('.ini')) {
 			if (!$subject.contains(':')) { $subject = "$env:PINT\..\$subject" }
-			$list = [regex]::Matches([IO.File]::ReadAllText($subject), "(^|\n)\[(.+?)\]") |% {$_.groups[2].value}
+			$list = get-ini-sections [IO.File]::ReadAllText($subject)
 		} else {
 			$list = pint search $subject
 		}
@@ -1220,13 +1113,13 @@ function pint-test([string]$subject)
 	}
 
 	$list = $list -split "`n"
-	$pad = (max-length $list) + 2
+	$pad = get-pad $list
 
-	$list -split "`n" |% {
+	$list |% {
 		$id = $_.trim()
+		write-host $id.padright($pad, ' ') -nonewline
 
 		try {
-			write-host $id.padright($pad, ' ') -nonewline
 			$info = pint-get-app-info $id
 			$url = pint-get-dist-link $info
 			$res = pint-make-request $url $false
@@ -1237,18 +1130,52 @@ function pint-test([string]$subject)
 	}
 }
 
-function pint-start($cmd)
+function pint-usage
 {
-	if (!$cmd) { pint-usage; exit 0 }
+	write-host "PINT - Portable INsTaller`n" -f white
+	write-host "Usage:"
+	write-host "pint `<command`> `<parameters`>`n" -f yellow
+	write-host "Available commands:"
 
-	$cmd = 'pint-' + $cmd
-
-	if (gcm $cmd -ea 0) {
-		& $cmd @args
-		exit $lastexitcode
+	@(
+		@('self-update', 'Update Pint.'),
+		@('search [<term>]', 'Search for an app in the database, or show all items.'),
+		@('installto <app> <dir> [<arch>] ', 'Install the app to the given directory.'),
+		@('install <app>', 'Install one or more apps to directories with the same names.'),
+		@('reinstall <dir>', 'Force reinstallation of the package.'),
+		@('list', 'Show all applications installed via Pint.'),
+		@('l', 'Show only names of installed applications.'),
+		@('outdated [<dir>]', 'Check for updates for all or some packages by your choice.'),
+		@('upgrade [<dir>]', 'Install updates for all or selected apps.'),
+		@('pin <dir>', 'Suppress updates for selected apps.'),
+		@('unpin <dir>', 'Allow updates for selected apps (undoes the pin command).'),
+		@('remove <dir>', 'Delete selected apps (this is equivalent to manual deletion).'),
+		@('purge <dir>', 'Delete selected apps AND their archives.'),
+		@('cleanup', 'Delete archives from dist.'),
+		@('forget <dir>', 'Stop tracking of selected apps.'),
+		@('download <app>', 'Only download selected installers without unpacking them.'),
+		@('shims', 'Recreate all shim files.'),
+		@('test [<app>|<file.ini>]', 'Test app definitions.')
+	) |% {
+		write-host $_[0].padright(24, ' ') -f green -nonewline
+		write-host $_[1]
 	}
 
-	write-host 'Unknown command' -f red
-	exit 1
+	write-host "`n`<app`> is a database ID, which can be seen via the search command."
+	write-host "`<dir`> is a path, relative to the 'apps' directory, as shown via 'list' command."
 }
 
+function pint-start($in)
+{
+	if (!$in) { pint-usage; exit 0 }
+
+	$cmd = 'pint-' + $in
+
+	try {
+		& (gcm $cmd -ea 1) @args
+		exit $lastexitcode
+	} catch {
+		write-host 'Unknown command' -f red
+		exit 1
+	}
+}

@@ -12,19 +12,17 @@ Pint is a tool for the people who prefer unpacking over installing. Its primary 
 - Downloads, unpacks and removes applications.
 - Checks for updates and downloads them if available.
 - Extracts downloads links from websites using [Xidel](http://www.videlibri.de/xidel.html).
-- Supports RSS and PAD files as link sources, has built-in routines to download from FileHippo, PortableApps.com and FossHub.
+- Supports RSS and PAD files as link sources, has built-in routines to download from FileHippo and PortableApps.com.
 - Unpacks various types of archives and installers, and upgrades apps, keeping configuration files intact.
 - Apps can be installed into arbitrary subdirectories under *apps*. This allows to keep yaP and PortableApps.com packages up to date.
-- Automatically detects console applications and creates shim files for them in the *shims* directory. (Read the *Shims* chapter on how to enable automatic shim generation.)
+- Automatically detects console applications and creates shim files for them in the *shims* directory.
 - Can remember, if a 32-bit or a 64-bit application was installed.
 - Can handle multiple installations of the same application.
 - Detects app versions.
 - Forms a report with installed applications.
 - Can temporarily suppress updates for selected apps.
 - Can update itself.
-- Provides a way to subscribe to multiple remote databases, even choose not to use the default one.
-- Is able to search across all subscribed databases.
-- Allows to keep a custom user database in a separate file (by default, packages.user.ini).
+- Can use multiple local and remote databases, even choose not to use default ones.
 - Allows to override paths and settings via environment variables.
 
 # What Pint is not
@@ -33,11 +31,10 @@ Pint is a tool for the people who prefer unpacking over installing. Its primary 
 
 # Installation
 To install Pint, save [pint.cmd](https://github.com/vensko/pint/raw/master/pint.cmd) to a separate directory. By default, Pint will create the following items:
-- **packages.ini** *Pint's database file*
-- **sources.list** *databases you are subscribed to*
 - **apps** *a directory for your apps*
-- **dist** *a directory for downloaded archives and installers*  
-- **shims** *a directory for shims*  
+- **apps\.shims** *a directory for shims*
+- **dist** *a directory for downloaded archives and installers*
+- **deps** *a directory for Pint's dependencies*  
 
 All paths are customisable, see the "Environment variables" chapter.  
   
@@ -63,15 +60,10 @@ pint self-update
 ```
 Self-explanatory. Updates Pint to the latest version.
 ```
-pint update
-```
-Downloads all files listed in *sources.list* and combines them into *packages.ini*. Never edit *packages.ini* manually, your changes will be lost! Use a separate *packages.user.ini* file for custom packages.  
-Also triggers *self-update*.
-```
 pint search [<term>]
 ```
-If the &lt;term&gt; is empty, yields a full list of packages from packages.ini.  
-If not, searches the database for the *term*.
+If the &lt;term&gt; is empty, yields a full list of packages from all databases listed in %PINT_DB%.  
+If not, searches the databases for *term*.
 ```
 pint download <app> [<app>]
 ```
@@ -107,10 +99,9 @@ pint purge <dir> [<dir>]
 ```
 Removes the subdirectories AND deletes corresponding archives from *dist*.
 ```
-pint cleanup [<prefix> [<prefix>]]
+pint cleanup
 ```
-Deleted installers. Optionally, prefixes of files to remove can be set.  
-For instance, *pint cleanup python node* will remove all archives with names starting with python2, python3, node4 and node5.
+Deletes all downloaded installers and archives.
 ```
 pint outdated [<dir> [<dir>]]
 ```
@@ -136,17 +127,9 @@ pint shims
 ```
 Removes all shims files and recreates them.
 ```
-pint subscribed
+pint test [<file.ini>|<app>]
 ```
-Shows a list of databases, that you are subscribed to.
-```
-pint subscribe <url>
-```
-Adds the URL to the subscriptions. Basically, this has to be a direct link to an .ini file.
-```
-pint unsubscribe <url>
-```
-Removes the URL from subscriptions.
+Tests given file, URL or app ID. Verifies remote file availability, content type and reported content length.
 
 # Custom install destinations (installto)
 In fact, Pint deals with app identifiers only during their download and/or installation. After that, all commands refer to actual subdirectories in *apps*, e.g.:  
@@ -177,14 +160,13 @@ As can be seen via the *list* command, they'll be referred to as WinRAR\x86 and 
 Certain parameters of Pint can be overriden with the following environment variables. All paths must include names, therefore they can be renamed as well.
  - **PINT_APP_DIR** - absolute path to the *apps* directory.
  - **PINT_DIST_DIR** - absolute path to the *dist* directory.
- - **PINT_SHIM_DIR** - absolute path to the *shims* directory.
- - **PINT_PACKAGES_FILE** - absolute path to packages.ini.
- - **PINT_PACKAGES_FILE_USER** - absolute path to packages.user.ini.
- - **PINT_SRC_FILE** - absolute path to sources.list.
+ - **PINT_SHIM_DIR** - absolute path to the *shims* directory
+ - **PINT_DEPS_DIR** - absolute path to the *deps* directory.
+ - **PINT_DB** - comma-separated list of file paths and URLs to .ini files with app definitions.
  - **PINT_USER_AGENT** - Pint's user agent.
 
 # INI format
-The apps database is located in packages.ini (%PINT_PACKAGES_FILE%). This file is being overwritten upon every update and should never be edited manually. Use a separate *packages.user.ini* (%PINT_PACKAGES_FILE_USER%) file for custom configuration.  
+App definitions are described in INI format. File paths and URLs to .ini files are passed to Pint via the PINT_DB environment variable as a comma-separated list.  
 Each app is described in a separate section:
 ```
 [app-id]
@@ -196,7 +178,9 @@ link = x86, .zip
 link64 = x64, .zip
 keep = *.xml
 ```
-Use lowercase strings without spaces as application identifiers. They must be unique, otherwise they may be overridden by an app with the same id.
+Use lowercase strings without spaces as application identifiers. They must be unique, otherwise they may be overridden by an app with the same id.  
+
+By default, new app definitions can be added to local file packages.user.ini.
 
 **Available keys**
 
@@ -228,9 +212,6 @@ Append *64* to a key to prefer it in a 64-bit system.
 dist = http://example.com/archive.zip  
 dist64 = http://example.com/archive64.zip  
 If a key has no a 64-bit counterpart, base name will be used as a fallback.
-
-# Shims
-To enable automatic shim generation, download [shimgen.exe](https://github.com/chocolatey/choco/blob/master/src/chocolatey.resources/tools/shimgen.exe) from Chocolatey repository and put it into Pint directory.
 
 # Alternatives
 - [Scoop](https://github.com/lukesampson/scoop)
