@@ -41,7 +41,8 @@ All paths are customisable, see the "Environment variables" chapter.
 There are also hard dependencies, installed automatically when needed:
 - [7-zip](http://www.7-zip.org/) - file archiver supporting a wide range of formats,
 - [Xidel](http://www.videlibri.de/xidel.html) - HTML/XML/JSON data extraction tool,
-- [innoextract](http://constexpr.org/innoextract/) - a tool to unpack installers created by Inno Setup.
+- [innoextract](http://constexpr.org/innoextract/) - a tool to unpack installers created by Inno Setup,
+- [shimgen](https://github.com/chocolatey/choco/blob/master/src/chocolatey.resources/tools/shimgen.exe) - shim generator by Chocolatey team.
 
 # Requirements
 - Powershell 2.0+
@@ -169,6 +170,7 @@ Certain parameters of Pint can be overriden with the following environment varia
 App definitions are described in INI format. File paths and URLs to .ini files are passed to Pint via the PINT_DB environment variable as a comma-separated list. By default, there are two registered databases:
 - [https://d.vensko.net/pint/db/packages.ini](https://d.vensko.net/pint/db/packages.ini) - maintained by Pint's author in [this](https://github.com/vensko/pint-packages) repository.
 - packages.user.ini - you can create this file in Pint's directory and use it for custom app definitions.  
+
 Feel free to override PINT_DB with your own app sources.
 
 # INI format
