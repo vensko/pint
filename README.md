@@ -165,8 +165,13 @@ Certain parameters of Pint can be overriden with the following environment varia
  - **PINT_DB** - comma-separated list of file paths and URLs to .ini files with app definitions.
  - **PINT_USER_AGENT** - Pint's user agent.
 
+# Databases
+App definitions are described in INI format. File paths and URLs to .ini files are passed to Pint via the PINT_DB environment variable as a comma-separated list. By default, there are two registered databases:
+- [https://d.vensko.net/pint/db/packages.ini](https://d.vensko.net/pint/db/packages.ini) - maintained by Pint's author in [this](https://github.com/vensko/pint-packages) repository.
+- packages.user.ini - you can create this file in Pint's directory and use it for custom app definitions.  
+Feel free to override PINT_DB with your own app sources.
+
 # INI format
-App definitions are described in INI format. File paths and URLs to .ini files are passed to Pint via the PINT_DB environment variable as a comma-separated list.  
 Each app is described in a separate section:
 ```
 [app-id]
