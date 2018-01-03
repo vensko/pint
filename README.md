@@ -32,7 +32,7 @@ Pint is a tool for the people who prefer unpacking over installing. Its primary 
 # Installation
 To install Pint, save [pint.cmd](https://github.com/vensko/pint/raw/master/pint.cmd) to a separate directory. By default, Pint will create the following items:
 - **apps** *a directory for your apps*
-- **apps\.shims** *a directory for shims*
+- **apps\\.shims** *a directory for shims*
 - **dist** *a directory for downloaded archives and installers*
 - **deps** *a directory for Pint's dependencies*  
 
