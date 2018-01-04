@@ -1111,7 +1111,7 @@ function pint-test([string]$subject)
 			$info = pint-get-app-info $id
 			$url = get-dist-link $info
 			$res = pint-make-request $url $false
-			write-host $res.Headers['Content-Type'] ('(' + $res.Headers['Content-Length'] + ')') -f green
+			write-host $res.ContentType ('(' + $res.ContentLength + ')') -f green
 		} catch {
 			write-host $_ -f red
 		}
