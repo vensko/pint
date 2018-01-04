@@ -130,7 +130,9 @@ Removes all shims files and recreates them.
 ```
 pint test [<file.ini>|<app>]
 ```
-Tests given file, URL or app ID. Verifies remote file availability, content type and reported content length.
+Tests given file, URL or app ID. Verifies remote file availability, content type and reported content length.  
+
+All functions, prefixed with pint-*, are available for external calls.
 
 # Custom install destinations (installto)
 In fact, Pint deals with app identifiers only during their download and/or installation. After that, all commands refer to actual subdirectories in *apps*, e.g.:  
@@ -165,11 +167,12 @@ Certain parameters of Pint can be overriden with the following environment varia
  - **PINT_DEPS_DIR** - absolute path to the *deps* directory.
  - **PINT_DB** - comma-separated list of file paths and URLs to .ini files with app definitions.
  - **PINT_USER_AGENT** - Pint's user agent.
+ - **PINT_DEV** - remote sources are updated once a day, this flag disables the cache.
 
 # Databases
 App definitions are described in INI format. File paths and URLs to .ini files are passed to Pint via the PINT_DB environment variable as a comma-separated list. By default, there are two registered databases:
-- [https://d.vensko.net/pint/db/packages.ini](https://d.vensko.net/pint/db/packages.ini) - maintained by Pint's author in [this](https://github.com/vensko/pint-packages) repository.
-- packages.user.ini - you can create this file in Pint's directory and use it for custom app definitions.  
+- [https://d.vensko.net/pint/db/packages.ini](https://d.vensko.net/pint/db/packages.ini) - maintained by Pint's author in [this repository](https://github.com/vensko/pint-packages).
+- packages.user.ini - missing by default, can be used for custom app definitions.  
 
 Feel free to override PINT_DB with your own app sources.
 

@@ -46,8 +46,8 @@ type = standalone
 [xidel]
 dist = https://master.dl.sourceforge.net/project/videlibri/Xidel/Xidel%200.9.6/xidel-0.9.6.win32.zip
 [innoextract]
-dist = http://constexpr.org/innoextract/
-link = .zip
+dist = https://github.com/dscharrer/innoextract/releases/latest
+link = win, .zip
 [7z]
 dist = http://www.7-zip.org/download.html
 link = .msi, !x64
@@ -113,6 +113,11 @@ function ensure-dir([string]$p)
 	if (!(is-dir $p)) { md $p -ea 1 | out-null }
 }
 
+function filesize($file)
+{
+	(new-object IO.FileInfo $file).length
+}
+
 function string-to-xpath-simple([string]$str, [bool]$rss)
 {
 	$exts = @('.7z', '.zip', '.rar', '.paf.exe')
@@ -152,12 +157,12 @@ function string-to-xpath([string]$str, [bool]$rss)
 
 function get-pint([string]$dir)
 {
-	dir (pint-dir $dir) -ea 1 -force -filter *.pint | select -first 1
+	dir (appdir $dir) -ea 1 -force -filter *.pint | select -first 1
 }
 
 function pint-get-app([string]$p)
 {
-	$p = pint-dir $p
+	$p = appdir $p
 	if (is-file $p) {
 		$f = $p
 		$dir = dirname $f
@@ -212,22 +217,19 @@ function pint-unpack([string]$file, [string]$dir)
 	write-host 'Unpacking' $filename
 
 	$fullPath = [IO.Path]::GetFullPath($file)
-	$sevenzip = get-dependency '7z'
 
 	switch ([IO.Path]::GetExtension($file).ToLower()) {
 		'.msi' {
 			& $env:ComSpec /d /c "msiexec /a `"$fullPath`" /norestart /qn TARGETDIR=`"$dir`""
 			break
 		}
-		{!(is-file $sevenzip) -and ($_ -eq '.zip')} {
+		{!(has-dependency '7z') -and ($_ -eq '.zip')} {
 			try {
 				$shell = new-object -com Shell.Application
 				$zip = $shell.NameSpace($fullPath)
 				$shell.Namespace($dir).copyhere($zip.items(), 20)
 			} catch {
-				write-host "Pint needs 7-zip to unpack $filename, installing automatically..." -f white
-				install-dependency '7z'
-				& $env:ComSpec /d /c "`"$sevenzip`" x -y -aoa -o`"$dir`" `"$fullPath`"" | out-null
+				sevenzip $fullPath $dir
 			}
 			break
 		}
@@ -241,16 +243,23 @@ function pint-unpack([string]$file, [string]$dir)
 				break
 			}
 
-			if (!(is-file $sevenzip)) {
-				write-host "Pint needs 7-zip to unpack $filename, installing automatically..." -f white
-				install-dependency '7z'
-			}
-
-			& $env:ComSpec /d /c "`"$sevenzip`" x -y -aoa -o`"$dir`" `"$fullPath`"" | out-null
+			sevenzip $fullPath $dir
 		}
 	}
 
 	!$lastexitcode
+}
+
+function sevenzip([string]$file, [string]$dir)
+{
+	$sevenzip = get-dependency '7z'
+
+	if (!(is-file $sevenzip)) {
+		write-host "Pint needs 7-zip to unpack $filename, installing automatically..." -f white
+		install-dependency '7z'
+	}
+
+	& $env:ComSpec /d /c "`"$sevenzip`" x -y -aoa -o`"$dir`" `"$file`"" | out-null
 }
 
 function pint-read-ini([string]$term)
@@ -386,7 +395,7 @@ function pint-make-request([string]$url, [bool]$download)
 	$res
 }
 
-function pint-get-dist-link([Hashtable]$info, [bool]$verbose)
+function get-dist-link([Hashtable]$info, [bool]$verbose)
 {
 	if (!$info['dist']) {
 		throw "No dist key."
@@ -477,9 +486,9 @@ function pint-get-dist-link([Hashtable]$info, [bool]$verbose)
 	$dist
 }
 
-function pint-is-app-outdated([Hashtable]$app, [bool]$download)
+function is-app-outdated([Hashtable]$app, [bool]$download)
 {
-	if (($url = pint-get-dist-link $app) -and ($res = pint-make-request $url $download)) {
+	if (($url = get-dist-link $app) -and ($res = pint-make-request $url $download)) {
 		if ($res.ContentLength -eq $app['size']) {
 			if ($download) {
 				$res.close()
@@ -490,7 +499,7 @@ function pint-is-app-outdated([Hashtable]$app, [bool]$download)
 	}
 }
 
-function pint-download-file([Net.WebResponse]$res, [string]$targetFile)
+function download-file([Net.WebResponse]$res, [string]$targetFile)
 {
 	ensure-dir (dirname $targetFile)
 
@@ -498,7 +507,7 @@ function pint-download-file([Net.WebResponse]$res, [string]$targetFile)
 
 	write-host "Downloading $($res.ResponseUri) ($("{0:N2} MB" -f ($totalLength / 1024)))"
 
-	$remoteName = pint-get-remote-name $res
+	$remoteName = get-remote-name $res
 	$rs = $res.GetResponseStream()
 	$fs = new-object IO.FileStream $targetFile, 'Create'
 	$buffer = new-object byte[] 512KB
@@ -527,7 +536,8 @@ function pint-download-file([Net.WebResponse]$res, [string]$targetFile)
 
 	$res.Close()
 
-	if (!$res.ContentLength -or $res.ContentLength -eq (new-object IO.FileInfo $targetFile).length) {
+	if (!$res.ContentLength -or $res.ContentLength -eq (filesize $targetFile)) {
+		write-host 'Saved to' $targetFile
 		$targetFile
 	} else {
 		del $targetFile -force
@@ -535,7 +545,7 @@ function pint-download-file([Net.WebResponse]$res, [string]$targetFile)
 	}
 }
 
-function pint-get-remote-name([Net.WebResponse]$res)
+function get-remote-name([Net.WebResponse]$res)
 {
 	if (($h = $res.headers['Content-Disposition']) -and $h.contains('=')) {
 		$name = ($h -split '=', 2)[1].replace('"', '').trim()
@@ -551,7 +561,7 @@ function distdir([string]$file)
 	join-path $env:PINT_DIST_DIR $file
 }
 
-function pint-dir([string]$path)
+function appdir([string]$path)
 {
 	if (![IO.Path]::isPathRooted($path)) {
 		$path = join-path $env:PINT_APP_DIR $path
@@ -562,7 +572,7 @@ function pint-dir([string]$path)
 function pint-download-app([string]$id, [string]$arch, $res)
 {
 	if ($res -isnot [Net.WebResponse]) {
-		if (!($info = pint-get-app-info $id $arch) -or !($url = pint-get-dist-link $info $true)) {
+		if (!($info = pint-get-app-info $id $arch) -or !($url = get-dist-link $info $true)) {
 			throw "Unable to find $id in the database."
 		}
 
@@ -571,28 +581,22 @@ function pint-download-app([string]$id, [string]$arch, $res)
 	}
 
 	if (!$arch) { $arch = $global:arch }
-	$name = pint-get-remote-name $res
+	$name = get-remote-name $res
 
 	$file = distdir "$id--$arch--$name"
 
-	if (is-file $file) {
-		if ((new-object IO.FileInfo $file).length -eq $res.ContentLength) {
-			$res.close()
-			write-host 'The local file has the same size as the remote one, skipping redownloading.'
-			return $file
-		}
-	}
-
-	if (pint-download-file $res $file) {
-		write-host 'Saved to' $file
+	if (is-file $file -and (filesize $file) -eq $res.ContentLength) {
+		$res.close()
+		write-host 'The local file has the same size as the remote one, skipping redownloading.'
 		return $file
 	}
+
+	download-file $res $file
 }
 
 function pint-force-install([string]$id, [string]$dir, [string]$arch)
 {
 	$file = pint-download-app $id $arch
-	if (!$file) { return }
 	pint-file-install $id $file $dir $arch
 }
 
@@ -603,7 +607,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 	}
 
 	if (!$destDir) { $destDir = $id }
-	$destDir = pint-dir $destDir
+	$destDir = appdir $destDir
 
 	if (!($info = pint-get-app $destDir) -and !($info = pint-get-app-info $id)) {
 		throw "Unable to find $id in the database."
@@ -708,7 +712,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 		$info['arch'] = $arch
 	}
 
-	$pintFile = (@($id, $version, $info['arch'], (new-object IO.FileInfo $file).length) |? {$_}) -join ' '
+	$pintFile = (@($id, $version, $info['arch'], (filesize $file)) |? {$_}) -join ' '
 	$pintFile = join-path $destDir "$pintFile.pint"
 
 	del (join-path $destDir '*.pint') -force
@@ -744,7 +748,9 @@ function pint-db
 				$db += [IO.File]::ReadAllText($src)
 			}
 		}
-		$db | out-file $cache
+		if (!$env:PINT_DEV) {
+			$db | out-file $cache
+		}
 		return $db
 	}
 
@@ -808,8 +814,8 @@ function pint-installto([string]$id, [string]$dir, $arch)
 			return
 		}
 
-		if ((dir (pint-dir $dir) -name -force -ea 0)) {
-			write-host (pint-dir $dir) 'is not empty.'
+		if ((dir (appdir $dir) -name -force -ea 0)) {
+			write-host (appdir $dir) 'is not empty.'
 			$confirm = read-host -prompt 'Do you want to REPLACE its contents? [Y/N] '
 			if ($confirm.trim().ToUpper() -ne 'Y') { return }
 		}
@@ -838,7 +844,7 @@ function pint-remove
 	}
 
 	$args |% {
-		$dir = pint-dir $_
+		$dir = appdir $_
 
 		if (is-dir $dir) {
 			write-host "Uninstalling $_..."
@@ -875,7 +881,7 @@ function pint-outdated
 				return
 			}
 
-			switch (pint-is-app-outdated $app) {
+			switch (is-app-outdated $app) {
 				$null { write-host 'REQUEST FAILED' -f red }
 				$false { write-host 'UP TO DATE' -f green }
 				default { write-host 'OUTDATED' -f yellow }
@@ -914,10 +920,9 @@ function pint-upgrade
 				return
 			}
 
-			if ($res = pint-is-app-outdated $app $true) {
+			if ($res = is-app-outdated $app $true) {
 				write-host 'OUTDATED' -f yellow
 				$file = pint-download-app $_ $null $res
-				if (!$file) { return }
 				pint-file-install $app['id'] $file $app['dir']
 			} else {
 				if ($res -eq $null) {
@@ -947,7 +952,7 @@ function pint-list
 		$name = basename $_
 		$id = ($name -split ' ', 2)[0]
 		$arch = if ($name.contains(' 32 ')) { 32 } else { 64 }
-		$fullpath = pint-dir $dir
+		$fullpath = appdir $dir
 
 		$table += new-object -TypeName PSObject -Prop @{
 			ID = $id
@@ -1026,10 +1031,6 @@ function pint-cleanup
 
 function pint-shims([string]$dir, [string]$include, [string]$exclude, [bool]$delete)
 {
-	if (!(has-dependency 'shimgen')) {
-		install-dependency 'shimgen'
-	}
-
 	if (!$dir) {
 		del (join-path $env:PINT_SHIM_DIR '*') -force
 		$dir = $env:PINT_APP_DIR
@@ -1087,6 +1088,9 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, [bool]$del
 				write-host "Removed" $baseName
 			}
 		} else {
+			if (!(has-dependency 'shimgen')) {
+				install-dependency 'shimgen'
+			}
 			$relpath = rvpa -relative -literalpath $relpath
 			& (get-dependency 'shimgen') -p $relpath -o $shim -i $relpath | out-null
 			write-host "Added" $baseName
@@ -1120,7 +1124,7 @@ function pint-test([string]$subject)
 
 		try {
 			$info = pint-get-app-info $id
-			$url = pint-get-dist-link $info
+			$url = get-dist-link $info
 			$res = pint-make-request $url $false
 			write-host $res.Headers['Content-Type'] ('(' + $res.Headers['Content-Length'] + ')') -f green
 		} catch {
