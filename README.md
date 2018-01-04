@@ -13,7 +13,7 @@ Pint is a tool for the people who prefer unpacking over installing. Its primary 
 - Checks for updates and downloads them if available.
 - Extracts download links from websites using [Xidel](http://www.videlibri.de/xidel.html).
 - Supports RSS and PAD files as link sources, has built-in routines to download from FileHippo and PortableApps.com.
-- Unpacks various types of archives and installers, and upgrades apps, keeping configuration files intact.
+- Unpacks various types of archives and installers and upgrades apps, keeping configuration files intact.
 - Apps can be installed into arbitrary subdirectories under *apps*. This allows to keep yaP and PortableApps.com packages up to date.
 - Automatically detects console applications and creates shim files for them in the *shims* directory.
 - Can remember, if a 32-bit or a 64-bit application was installed.
@@ -78,7 +78,7 @@ Downloads an archive (or a few) into *dist* and unpacks them into subdirectories
 pint installto <app> <dir> [32|64]
 ```
 Installs the app into the given subdirectory.  
-Optionally, a preferred bit count can be set with the third parameter (useful if you need to force installation of a 32-bit version in a 64-bit system).
+Optionally, preferred bit count can be set with the third parameter (useful if you need to force installation of a 32-bit version in a 64-bit system).
 ```
 pint list
 ```
@@ -154,7 +154,7 @@ To be able to manage this setup, run this:
 pint installto winrar WinRAR\x86 32
 pint installto winrar WinRAR\x64 64
 ```
-Pint will handle handle both copies and update them using a correct archive.  
+Pint will handle both copies and update them using a correct archive.  
 As can be seen via the *list* command, they'll be referred to as WinRAR\x86 and WinRAR\x64 respectively.
 
 # Environment variables
