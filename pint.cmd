@@ -52,6 +52,7 @@ link = .zip
 dist = http://www.7-zip.org/download.html
 link = .msi, !x64
 link64 = x64.msi
+only = 7z.exe, 7z.dll
 "@
 
 function get-dependency([string]$id)
@@ -66,7 +67,7 @@ function has-dependency([string]$id)
 
 function install-dependency([string]$id)
 {
-	pint-force-install $id (join-path $env:PINT_DEPS_DIR $id) 32
+	pint-force-install $id (join-path $env:PINT_DEPS_DIR $id)
 }
 
 function get-ini-sections([string]$ini, [string]$term)
