@@ -328,66 +328,51 @@ function pint-get-app-info([string]$id, [string]$arch)
 
 function pint-make-ftp-request([string]$url, [bool]$download)
 {
-	$req = [Net.WebRequest]::Create($url)
+	$req = [Net.FtpWebRequest]::Create($url)
 	$req.Timeout = $global:httpTimeout
 	if (!$download) { $req.Method = [Net.WebRequestMethods+Ftp]::GetFileSize }
 	$req.GetResponse()
 }
 
-function pint-make-http-request([string]$url, [bool]$download, [bool]$disableAutoRedirect)
+function pint-make-http-request([string]$url, [bool]$download)
 {
 	try {
 		$req = [Net.WebRequest]::Create($url)
 		$req.Timeout = $global:httpTimeout
 		$req.UserAgent = $env:PINT_USER_AGENT
-		$req.AllowAutoRedirect = !$disableAutoRedirect
+		$req.AllowAutoRedirect = $true
 		$req.MaximumAutomaticRedirections = $global:httpMaxRedirects
 		$req.Accept = '*/*'
+
 		if (!$url.contains('sourceforge.net')) {
 			$req.Referer = $url
 		}
-		$req.GetResponse()
-	} catch [Management.Automation.MethodInvocationException] {
-		if ($_.Exception.Message -match '\((4|5)[\d]{2}\)') {
-			throw $_.Exception.Message
+
+		$res = $req.GetResponse()
+
+		if (([string]$res.ContentType).contains('text/html')) {
+			$res.close()
+			throw "$url responded with a HTML page."
 		}
 
-		$maxRedirects = $global:httpMaxRedirects
-		while ($true) {
-			if ($url.StartsWith('ftp:')) {
-				return pint-make-ftp-request $url $download
-			} else {
-				$res = pint-make-http-request $url $download $true
-				if ($res.headers['Location']) {
-					$res.close()
-					if ($maxRedirects-- -eq 0) {
-						throw "Exceeded limit of redirections retrieving $url"
-					}
-					$url = $res.headers['Location']
-					continue
-				} else {
-					return $res
-				}
-			}
+		$res
+	} catch [Management.Automation.MethodInvocationException] {
+		$e = $_.Exception.InnerException
+
+		if ($e.Response.Headers -and ([string]$e.Response.Headers['Location']).StartsWith('ftp:')) {
+			return pint-make-ftp-request $e.Response.Headers['Location'] $download
 		}
+
+		throw $e
 	}
 }
 
 function pint-make-request([string]$url, [bool]$download)
 {
-	if ($url.StartsWith('ftp:')) {
-		$res = pint-make-ftp-request $url $download
+	$res = if ($url.StartsWith('ftp:')) {
+		pint-make-ftp-request $url $download
 	} else {
-		$res = pint-make-http-request $url $download
-	}
-
-	if (!$res) {
-		throw "Failed to connect to $url"
-	}
-
-	if (([string]$res.ContentType).contains('text/html')) {
-		$res.close()
-		throw "$url responded with a HTML page."
+		pint-make-http-request $url $download
 	}
 
 	if (!$download) { $res.close() }
@@ -1168,17 +1153,17 @@ function pint-usage
 	write-host "`<dir`> is a path, relative to the 'apps' directory, as shown via 'list' command."
 }
 
-function pint-start($in)
+function pint-start($cmd)
 {
-	if (!$in) { pint-usage; exit 0 }
+	if (!$cmd) { pint-usage; exit 0 }
 
-	$cmd = 'pint-' + $in
+	$cmd = 'pint-' + $cmd
 
-	try {
-		& (gcm $cmd -ea 1) @args
+	if (gcm $cmd -ea 0) {
+		& $cmd @args
 		exit $lastexitcode
-	} catch {
-		write-host 'Unknown command' -f red
-		exit 1
 	}
+
+	write-host 'Unknown command'
+	exit 1
 }
