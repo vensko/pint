@@ -36,7 +36,7 @@ $DebugPreference = 'Continue'
 [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
 $global:httpMaxRedirects = 5
-$global:httpTimeout = 10000
+$global:httpTimeout = 15000
 $global:arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'x86') {32} else {64}
 
 $global:dependencies = @"
@@ -72,7 +72,7 @@ function install-dependency([string]$id)
 
 function get-ini-sections([string]$ini, [string]$term)
 {
-	[regex]::Matches($ini, "(^|\n)\[(.*?$term.*?)\]", [Text.RegularExpressions.RegexOptions]::IgnoreCase) |% {$_.groups[2].value}
+	[regex]::Matches($ini, "(^|\n)\[(.*?$term.*?)\]", [Text.RegularExpressions.RegexOptions]::IgnoreCase) |% {$_.groups[2].value} | get-unique
 }
 
 function basename([string]$f)
@@ -1094,10 +1094,10 @@ function pint-test([string]$subject)
 			if (!$subject.contains(':')) { $subject = "$env:PINT\..\$subject" }
 			$list = get-ini-sections [IO.File]::ReadAllText($subject)
 		} else {
-			$list = pint search $subject
+			$list = pint-search $subject
 		}
 	} else {
-		$list = pint search
+		$list = pint-search
 	}
 
 	$list = $list -split "`n"
