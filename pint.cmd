@@ -109,7 +109,7 @@ function is-dir([string]$p)
 
 function ensure-dir([string]$p)
 {
-	if (!(is-dir $p)) { md $p -ea stop | out-null }
+	if (!(is-dir $p)) { md $p -ea 1 | out-null }
 }
 
 function string-to-xpath-simple([string]$str, [bool]$rss)
@@ -284,7 +284,7 @@ function pint-read-ini([string]$term)
 function pint-get-version([string]$dir)
 {
 	try {
-		$v = (dir $dir -r -filter *.exe -ea stop | sort -property length -descending | select -first 1).VersionInfo.ProductVersion.trim()
+		$v = (dir $dir -r -filter *.exe -ea 1 | sort -property length -descending | select -first 1).VersionInfo.ProductVersion.trim()
 		if ($v.contains(',')) { $v = $v.replace(',', '.') }
 		if ($v.contains('-')) { $v = ($v -split '-', 2)[0] }
 		if (!($v -match "^[0-9\.]+$")) { return }
@@ -398,9 +398,7 @@ function pint-get-dist-link([Hashtable]$info, [bool]$verbose)
 	$rss = $dist.contains('/rss')
 
 	if (!$link) {
-		if ($dist.contains('portableapps.com/apps/')) {
-			$link = "//a[contains(@href, '.paf.exe')]"
-		} elseif ($dist.contains('filehippo.com/')) {
+		if ($dist.contains('filehippo.com/')) {
 			$follow = "(//a[contains(@class, 'program-header-download-link')])[1]"
 			$link = '//meta[@http-equiv="Refresh"]/@content'
 		} elseif ($rss) {
