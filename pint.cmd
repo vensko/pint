@@ -112,7 +112,7 @@ function ensure-dir([string]$p)
 	if (!(is-dir $p)) { md $p -ea 1 | out-null }
 }
 
-function filesize($file)
+function filesize([string]$file)
 {
 	(new-object IO.FileInfo $file).length
 }
@@ -464,7 +464,7 @@ function get-dist-link([Hashtable]$info, [bool]$verbose)
 			$dist = $dist.trim()
 
 			if ($info['dist'].contains('filehippo.com/')) {
-				$dist = 'http://filehippo.com' + ($dist -split '=', 2)[1]
+				$dist = 'https://filehippo.com' + ($dist -split '=', 2)[1]
 			}
 		}
 	}
@@ -474,19 +474,6 @@ function get-dist-link([Hashtable]$info, [bool]$verbose)
 	}
 
 	$dist
-}
-
-function is-app-outdated([Hashtable]$app, [bool]$download)
-{
-	if (($url = get-dist-link $app) -and ($res = pint-make-request $url $download)) {
-		if ($res.ContentLength -eq $app['size']) {
-			if ($download) {
-				$res.close()
-			}
-			return $false
-		}
-		$res
-	}
 }
 
 function download-file([Net.WebResponse]$res, [string]$targetFile)
@@ -853,6 +840,7 @@ function pint-outdated
 
 	if (!$args.count) { $args = pint-l }
 	$pad = get-pad $args
+	$download = [bool]$global:upgrade
 
 	$args |% {
 		write-host $_.padright($pad, ' ') -nonewline
@@ -865,41 +853,7 @@ function pint-outdated
 				return
 			}
 
-			if (!$app['size']) {
-				write-host 'NO SIZE DATA' -f darkyellow
-				return
-			}
-
-			switch (is-app-outdated $app) {
-				$null { write-host 'REQUEST FAILED' -f red }
-				$false { write-host 'UP TO DATE' -f green }
-				default { write-host 'OUTDATED' -f yellow }
-			}
-		} catch {
-			write-host $_ -f red
-		}
-	}
-}
-
-function pint-upgrade
-{
-	write-host 'Checking for updates...'
-
-	if (!$args.count) { $args = pint-l }
-	$pad = get-pad $args
-
-	$args |% {
-		write-host $_.padright($pad, ' ') -nonewline
-
-		try {
-			$app = pint-get-app $_
-
-			if (!$app) {
-				write-host 'NOT FOUND' -f red
-				return
-			}
-
-			if ($app['pinned']) {
+			if ($download -and $app['pinned']) {
 				write-host 'PINNED' -f yellow
 				return
 			}
@@ -909,21 +863,30 @@ function pint-upgrade
 				return
 			}
 
-			if ($res = is-app-outdated $app $true) {
-				write-host 'OUTDATED' -f yellow
-				$file = pint-download-app $_ $null $res
+			$url = get-dist-link $app
+			$res = pint-make-request $url $download
+
+			if ($res.ContentLength -eq $app['size']) {
+				write-host 'UP TO DATE' -f green
+				return
+			}
+
+			write-host 'OUTDATED' -f yellow
+
+			if ($download) {
+				$file = pint-download-app $app['id'] $null $res
 				pint-file-install $app['id'] $file $app['dir']
-			} else {
-				if ($res -eq $null) {
-					write-host 'REQUEST FAILED' -f red
-				} else {
-					write-host 'UP TO DATE' -f green
-				}
 			}
 		} catch {
 			write-host $_ -f red
 		}
 	}
+}
+
+function pint-upgrade
+{
+	$global:upgrade = $true
+	pint-outdated @args
 }
 
 function pint-l
@@ -1074,7 +1037,7 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, [bool]$del
 		if ($delete) {
 			if (is-file $shim) {
 				del $shim
-				write-host "Removed" $baseName
+				write-host 'Removed' $baseName
 			}
 		} else {
 			if (!(has-dependency 'shimgen')) {
@@ -1082,7 +1045,7 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, [bool]$del
 			}
 			$relpath = rvpa -relative -literalpath $relpath
 			& (get-dependency 'shimgen') -p $relpath -o $shim -i $relpath | out-null
-			write-host "Added" $baseName
+			write-host 'Added' $baseName
 		}
 	}
 }
