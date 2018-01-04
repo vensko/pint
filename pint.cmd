@@ -51,7 +51,6 @@ link = win, .zip
 [7z]
 dist = http://www.7-zip.org/download.html
 link = .msi, !x64
-link64 = x64.msi
 only = 7z.exe, 7z.dll
 "@
 
@@ -67,7 +66,7 @@ function has-dependency([string]$id)
 
 function install-dependency([string]$id)
 {
-	pint-force-install $id (join-path $env:PINT_DEPS_DIR $id)
+	pint-force-install $id (join-path $env:PINT_DEPS_DIR $id) 32
 }
 
 function get-ini-sections([string]$ini, [string]$term)
@@ -118,13 +117,18 @@ function filesize($file)
 	(new-object IO.FileInfo $file).length
 }
 
+function clist([string]$str)
+{
+	$str -split ',' |% {$_.trim()} |? {$_}
+}
+
 function string-to-xpath-simple([string]$str, [bool]$rss)
 {
 	$exts = @('.7z', '.zip', '.rar', '.paf.exe')
 
 	(
-		$str.ToLower() -split ',' |% {
-			$p = $_.trim()
+		clist $str.ToLower() |% {
+			$p = $_
 			$not = ($p[0] -eq '!')
 			$attr = if ($rss -or ($p[-1] -eq '"')) { '.' } else { '@href' }
 			$p = $p.trimstart('!').trim('"')
@@ -358,9 +362,10 @@ function pint-make-http-request([string]$url, [bool]$download)
 		$res
 	} catch [Management.Automation.MethodInvocationException] {
 		$e = $_.Exception.InnerException
+		$headers = $e.Response.Headers
 
-		if ($e.Response.Headers -and ([string]$e.Response.Headers['Location']).StartsWith('ftp:')) {
-			return pint-make-ftp-request $e.Response.Headers['Location'] $download
+		if ($headers -and ([string]$headers['Location']).StartsWith('ftp:')) {
+			return pint-make-ftp-request $headers['Location'] $download
 		}
 
 		throw $e
@@ -532,7 +537,7 @@ function download-file([Net.WebResponse]$res, [string]$targetFile)
 
 function get-remote-name([Net.WebResponse]$res)
 {
-	if (($h = $res.headers['Content-Disposition']) -and $h.contains('=')) {
+	if (($h = $res.Headers['Content-Disposition']) -and $h.contains('=')) {
 		$name = ($h -split '=', 2)[1].replace('"', '').trim()
 	} else {
 		$name = ([string]$res.ResponseUri -split '/')[-1]
@@ -626,7 +631,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 		}
 
 		$keep = if ($info['keep'] -ne $null) {
-			$info['keep'] -split ',' |% {$_.trim()} |? {$_}
+			clist $info['keep']
 		} else {
 			@('*.ini','*.db')
 		}
@@ -651,7 +656,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 		}
 
 		if ($info['only']) {
-			$only = $info['only'] -split ',' |% {$_.trim()}  |? {$_}
+			$only = clist $info['only']
 
 			$params = @{
 				include = $only
@@ -714,8 +719,8 @@ function pint-db
 	$db = $global:dependencies
 
 	if (!($env:PINT_DB).contains('://')) {
-		$env:PINT_DB -split ',' |% {
-			$db += "`n" + [IO.File]::ReadAllText($_.trim())
+		clist $env:PINT_DB |% {
+			$db += "`n" + [IO.File]::ReadAllText($_)
 		}
 		return $db
 	}
@@ -724,13 +729,12 @@ function pint-db
 	$timespan = new-timespan -days 1
 
 	if ($env:PINT_DEV -or !(is-file $cache) -or (get-date) - (get-item $cache).LastWriteTime -gt $timespan) {
-		$env:PINT_DB -split ',' |% {
+		clist $env:PINT_DB |% {
 			$db += "`n"
-			$src = $_.trim()
-			if ($src.contains('://')) {
-				$db += (web-client).DownloadString($src)
-			} elseif (is-file $src) {
-				$db += [IO.File]::ReadAllText($src)
+			if ($_.contains('://')) {
+				$db += (web-client).DownloadString($_)
+			} elseif (is-file $_) {
+				$db += [IO.File]::ReadAllText($_)
 			}
 		}
 		if (!$env:PINT_DEV) {
@@ -1025,12 +1029,12 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, [bool]$del
 		recurse = $true
 		force = $true
 		name = $true
-		exclude = $exclude -split ',' |% {$_.trim()} |? {$_}
+		exclude = clist $exclude
 		ea = 0
 	}
 
 	if ($include) {
-		$includeArr = $include -split ',' |% {$_.trim()} |? {$_}
+		$includeArr = clist $include
 		$params['include'] = @('*.exe') + $includeArr
 	} else {
 		$params['filter'] = '*.exe'
@@ -1103,12 +1107,11 @@ function pint-test([string]$subject)
 	$list = $list -split "`n"
 	$pad = get-pad $list
 
-	$list |% {
-		$id = $_.trim()
-		write-host $id.padright($pad, ' ') -nonewline
+	$list |% {$_.trim()} |% {
+		write-host $_.padright($pad, ' ') -nonewline
 
 		try {
-			$info = pint-get-app-info $id
+			$info = pint-get-app-info $_
 			$url = get-dist-link $info
 			$res = pint-make-request $url $false
 			write-host $res.ContentType ('(' + $res.ContentLength + ')') -f green
