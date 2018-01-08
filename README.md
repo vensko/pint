@@ -12,7 +12,7 @@ Pint is a tool for the people who prefer unpacking over installing. Its primary 
 - Downloads, unpacks and removes applications.
 - Checks for updates and downloads them if available.
 - Extracts download links from websites using [Xidel](http://www.videlibri.de/xidel.html).
-- Supports RSS and PAD files as link sources, has built-in routine to download from FileHippo.
+- Supports RSS and PAD files as link sources.
 - Unpacks various types of archives and installers and upgrades apps, keeping configuration files intact.
 - Apps can be installed into arbitrary subdirectories under *apps*. This allows to keep yaP and PortableApps.com packages up to date.
 - Automatically detects console applications and creates shim files for them in the *shims* directory.
