@@ -967,7 +967,7 @@ function pint-usage
 	@(
 		@('self-update', 'Update Pint.'),
 		@('search [<term>]', 'Search for an app in the database, or show all items.'),
-		@('installto <app> <dir> [<arch>] ', 'Install the app to the given directory.'),
+		@('installto <app> <dir> [32|64] ', 'Install the app to the given directory.'),
 		@('install <app>', 'Install one or more apps to directories with the same names.'),
 		@('reinstall <dir>', 'Force reinstallation of the package.'),
 		@('list', 'Show all applications installed via Pint.'),
@@ -982,7 +982,7 @@ function pint-usage
 		@('forget <dir>', 'Stop tracking of selected apps.'),
 		@('download <app>', 'Only download selected installers without unpacking them.'),
 		@('shims', 'Recreate all shim files.'),
-		@('test [<app>|<file.ini>]', 'Test app definitions.'),
+		@('test [<app>|<file.ini>] [32|64]', 'Test app definitions.'),
 		@('db', 'Output all database entries.'),
 		@('unpack <file> <path>', 'Extract a file to a specified directory.')
 	) |% {

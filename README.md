@@ -128,7 +128,7 @@ pint shims
 ```
 Removes all shims files and recreates them.
 ```
-pint test [<file.ini>|<app>]
+pint test [<file.ini>|<app>] [32|64]
 ```
 Tests given file, URL or app ID. Verifies remote file availability, content type and reported content length.  
 
