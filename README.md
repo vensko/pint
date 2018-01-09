@@ -1,5 +1,5 @@
 # Pint
-Portable INsTaller - a command-line manager of portable applications for Windows, which fits into a single file.  
+Portable INsTaller - a command line manager of portable applications for Windows, which fits into a single file.  
 [Support forum](http://www.portablefreeware.com/forums/viewtopic.php?f=6&t=22888) at TPFC.  
 
 Pint is a tool for the people who prefer unpacking over installing. Its primary goal was to provide a way to easily manage a collection of portable apps. With the emergence of portabilizers like [yaP](http://rolandtoth.hu/yaP/), [PortableApps.com Platform](http://portableapps.com/platform/features) and other, focusing solely on the natively portable apps became irrelevant. Pint downloads and unpacks everything it can. At the moment it supports:
@@ -217,6 +217,10 @@ There are some meta-values:
 **xd**, **xf** - comma-separated lists of directores and files (respectively), which should be left behind. These files will be neither removed from a target directory, nor copied from a temporary one. Pint uses Robocopy to copy files. These parameters are used as values for its /XD and /XF parameters. If **only** is set, these parameters are ignored.
 
 **noshim** - Pint automatically detects console applications and creates shim files for them. Files, listed in **noshim**, will be skipped.
+
+**method** - set HTTP method for link request (GET by default).  
+
+**data** - if **method** is changed to POST, use this key to set custom payload in the x-www-form-urlencoded format.  
 
 Append *64* to a key to prefer it in a 64-bit system.  
 dist = http://example.com/archive.zip  
