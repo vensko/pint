@@ -124,9 +124,11 @@ function ini-section([string]$section)
 
 function get-text($src)
 {
-	$client = new-object Net.WebClient
-	$client.Headers['User-Agent'] = $env:PINT_USER_AGENT
-	$client.DownloadString($src)
+	try {
+		$client = new-object Net.WebClient
+		$client.Headers['User-Agent'] = $env:PINT_USER_AGENT
+		$client.DownloadString($src)
+	} catch {}
 }
 
 function pint-make-ftp-request([string]$url, [bool]$download)
