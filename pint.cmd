@@ -289,8 +289,8 @@ function pint-get-version([string]$dir)
 {
 	try {
 		$v = (dir $dir -r -filter *.exe -ea 1 | sort length -desc | select -first 1).VersionInfo.ProductVersion.trim()
-		$v = $v.replace(',', '.')
-		$v = ($v -split '-', 2)[0]
+		$v = $v.replace(', ', '.').replace(',', '.')
+		$v = ($v -split '[- ]+', 2)[0]
 		if (!($v -match "^[0-9\.]+$")) { return }
 		while ($v.endswith('.0')) { $v = $v.substring(0, $v.length-2) }
 		$v
