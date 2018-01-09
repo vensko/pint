@@ -982,7 +982,9 @@ function pint-usage
 		@('forget <dir>', 'Stop tracking of selected apps.'),
 		@('download <app>', 'Only download selected installers without unpacking them.'),
 		@('shims', 'Recreate all shim files.'),
-		@('test [<app>|<file.ini>]', 'Test app definitions.')
+		@('test [<app>|<file.ini>]', 'Test app definitions.'),
+		@('db', 'Output all database entries.'),
+		@('unpack <file> <path>', 'Extract a file to a specified directory.')
 	) |% {
 		write-host $_[0].padright(24, ' ') -f green -nonewline
 		write-host $_[1]
