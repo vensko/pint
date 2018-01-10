@@ -1,6 +1,6 @@
 # Pint
 Portable INsTaller - a command line manager of portable applications for Windows, which fits into a single file.  
-[Support forum](http://www.portablefreeware.com/forums/viewtopic.php?f=6&t=22888) at TPFC.  
+[Support forum](https://www.portablefreeware.com/forums/viewtopic.php?f=6&t=22888) at TPFC.  
 
 Pint is a tool for the people who prefer unpacking over installing. Its primary goal was to provide a way to easily manage a collection of portable apps. With the emergence of portabilizers like [yaP](http://rolandtoth.hu/yaP/), [PortableApps.com Platform](http://portableapps.com/platform/features) and other, focusing solely on the natively portable apps became irrelevant. Pint downloads and unpacks everything it can. At the moment it supports:
 - Zip archives.
