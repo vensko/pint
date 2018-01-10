@@ -198,6 +198,12 @@ Use lowercase strings without spaces as application identifiers. They must be un
 By default, new app definitions can be added to local file packages.user.ini.
 
 ## Available keys
+Append *64* to a key to prefer it in a 64-bit system.
+```
+dist = http://example.com/archive.zip
+dist64 = http://example.com/archive64.zip
+```
+If a key has no a 64-bit counterpart, base name will be used as a fallback.
 
 ### `dist`
 If `link` is not defined, `data` is treated as a direct download URL to a file. If `link` is defined, the URL must point to a web page. The only mandatory key.
@@ -237,13 +243,6 @@ Set HTTP method for link request (GET by default).
 
 ### `data`
 If **method** is changed to POST, use this key to set custom payload in the x-www-form-urlencoded format.  
-
-Append *64* to a key to prefer it in a 64-bit system.
-```
-dist = http://example.com/archive.zip
-dist64 = http://example.com/archive64.zip
-```
-If a key has no a 64-bit counterpart, base name will be used as a fallback.
 
 # Alternatives
 - [Scoop](https://github.com/lukesampson/scoop)
