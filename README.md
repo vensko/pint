@@ -54,97 +54,84 @@ Both are shipped with Windows 7+.
 ```
 pint <command> <parameters>
 ```
+All functions, prefixed with pint-\*, are available for external calls.
 
-# Available commands
-```
-pint self-update
-```
+## Available commands
+
+### `pint self-update`
 Self-explanatory. Updates Pint to the latest version.
-```
-pint search [<term>]
-```
-If the &lt;term&gt; is empty, yields a full list of packages from all databases listed in %PINT_DB%.  
-If not, searches the databases for *term*.
-```
-pint download <app> [<app>]
-```
-Downloads one or more apps into *dist* without unpacking them. All downloaded packages are stored with filenames in the format *&lt;app&gt;--&lt;architecture&gt;--&lt;actual-filename&gt;*.  
+
+### `pint search [<term>]`
+If `<term>` is empty, yields a full list of packages from all databases listed in %PINT_DB%.
+If not, searches the databases for `<term>`.
+
+### `pint download <app> [<app>]`
+Downloads one or more apps into **dist** without unpacking them. All downloaded packages are stored with filenames in the format `<app>--<architecture>--<actual-filename>`.  
 Keep in mind, that the architecture attribute in Pint never refers to an actual bit count, but rather to a *preferred* value. If a 64-bit version of an app is not available yet and your processor is 64-bit, a 32-bit version will be downloaded and marked as 64. With a 64-bit version released, the app will be automatically upgraded from 32 to 64 bit.
-```
-pint install <app> [<app>]
-```
-Downloads an archive (or a few) into *dist* and unpacks them into subdirectories with corresponding names under *apps*.
-```
-pint installto <app> <dir> [32|64]
-```
-Installs the app into the given subdirectory.  
+
+### `pint install <app> [<app>]`
+Downloads an archive (or a few) into **dist** and unpacks them into subdirectories with corresponding names under **apps**.
+
+### `pint installto <app> <dir> [32|64]`
+Installs the app into the given subdirectory. After installation, the app directory can be renamed or moved anywhere under **apps** any way you wish, all installations are self-contained.
 Optionally, preferred bit count can be set with the third parameter (useful if you need to force installation of a 32-bit version in a 64-bit system).
-```
-pint list
-```
+
+### `pint list`
 Shows a full list of installed apps with some metadata.
-```
-pint l
-```
-Lists only directories without retrieving metadata. If the *list* table becomes too large, this may be a faster way to check directory names.
-```
-pint reinstall <dir> [<dir>]
-```
+
+### `pint l`
+Lists only directories without retrieving metadata. If the `pint list` table becomes too large, this may be a faster way to check directory names.
+
+### `pint reinstall <dir> [<dir>]`
 Forces reinstallation of the apps.
-```
-pint remove <dir> [<dir>]
-```
+
+### `pint remove <dir> [<dir>]`
 Removes the subdirectories. This is fully equivalent to manual deletion of the folders.
-```
-pint purge <dir> [<dir>]
-```
-Removes the subdirectories AND deletes corresponding archives from *dist*.
-```
-pint cleanup
-```
+
+### `pint purge <dir> [<dir>]`
+Removes the subdirectories AND deletes corresponding archives from **dist**.
+
+### `pint cleanup`
 Deletes all downloaded installers and archives.
-```
-pint outdated [<dir> [<dir>]]
-```
+
+### `pint outdated [<dir> [<dir>]]`
 Checks for updates for the apps. With parameters omitted, Pint will check all installed apps.
-```
-pint upgrade [<dir> [<dir>]]
-```
+
+### `pint upgrade [<dir> [<dir>]]`
 Checks for updates AND installs them if available. Same here, without parameters this will try to upgrade everything.
-```
-pint forget <dir> [<dir>]
-```
-Pint never touches subdirectories, where it hadn't installed anything previously. Subdirectories with manually installed apps will simply be ignored. The *forget* command removes Pint's metadata from the subdirectories. To make them manageable again, use *installto*.
-```
-pint pin <dir> [<dir>]
-```
+
+### `pint forget <dir> [<dir>]`
+Pint never touches subdirectories, where it hadn't installed anything previously. Subdirectories with manually installed apps will simply be ignored. This command removes Pint's metadata from the subdirectories. To make them manageable again, use `installto`.
+
+### `pint pin <dir> [<dir>]`
 Keeps Pint's metadata yet suppresses automatic updates for the apps.
-```
-pint unpin <dir> [<dir>]
-```
-Allows automatic updates (undoes *pin*).
-```
-pint shims
-```
+
+### `pint unpin <dir> [<dir>]`
+Allows automatic updates (undoes `pin`).
+
+### `pint shims`
 Removes all shims files and recreates them.
-```
-pint test [<file.ini>|<app>] [32|64]
-```
-Tests given file, URL or app ID. Verifies remote file availability, content type and reported content length.  
 
-All functions, prefixed with pint-*, are available for external calls.
-
+### `pint test [<file.ini>|<app>] [32|64]`
+Tests given file, URL or app ID. Verifies remote file availability, content type and reported content length.
+  
 # Custom install destinations (installto)
-In fact, Pint deals with app identifiers only during their download and/or installation. After that, all commands refer to actual subdirectories in *apps*, e.g.:  
-D:\Pint\apps\\**firefox**  
-D:\Pint\apps\\**foobar2000**  
-To keep things simple, you may use only the *install* command. This way, database identifiers and subdirectories will always be the same. But if you prefer storing your browser in *apps\Mozilla Firefox* instead of *apps\firefox*, this can be done with *installto*:
+In fact, Pint deals with app identifiers only during their download and/or installation. After that, all commands refer to actual subdirectories in **apps**, e.g.:
+- D:\Pint\apps\\**firefox**
+- D:\Pint\apps\\**foobar2000**
+
+To keep things simple, you may use only the `install` command. This way, database identifiers and subdirectories will always be the same. But if you prefer storing your browser in *apps\Mozilla Firefox* instead of *apps\firefox*, this can be done with `installto`:
 ```
 pint installto firefox "Mozilla Firefox"
 ```
-FF will be installed into  
-D:\Pint\apps\\**Mozilla Firefox**  
-From this point, it will have to be referred to as "Mozilla Firefox".  
+FF will be installed into
+- D:\Pint\apps\\**Mozilla Firefox**
+
+From this point, it will have to be referred to as "Mozilla Firefox":
+```
+pint outdated "Mozilla Firefox"
+pint remove "Mozilla Firefox"
+```
 
 For another example, consider a yaP setup with the directory structure:
 - apps\WinRAR\WinRARPortable.exe (yaP executable)
@@ -157,7 +144,7 @@ pint installto winrar WinRAR\x86 32
 pint installto winrar WinRAR\x64 64
 ```
 Pint will handle both copies and update them using a correct archive.  
-As can be seen via the *list* command, they'll be referred to as WinRAR\x86 and WinRAR\x64 respectively.
+As can be seen via the `list` command, they'll be referred to as WinRAR\x86 and WinRAR\x64 respectively.
 
 # Environment variables
 Certain parameters of Pint can be overriden with the following environment variables. All paths must include names, therefore they can be renamed as well.
