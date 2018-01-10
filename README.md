@@ -73,7 +73,7 @@ Keep in mind, that the architecture attribute in Pint never refers to an actual 
 Downloads an archive (or a few) into **dist** and unpacks them into subdirectories with corresponding names under **apps**.
 
 ### `pint installto <app> <dir> [32|64]`
-Installs `<app>` into an arbitrary **apps** subdirectory. After installation, the app directory can be renamed or moved anywhere under **apps** any way you wish, all installations are self-contained. Check `pint l` for available `<dir>` values.
+Installs `<app>` into an arbitrary **apps** subdirectory. After installation, the app directory can be renamed or moved anywhere under **apps** any way you wish, all installations are self-contained. Check `pint l` for a changed `<dir>` value.
 
 Optionally, preferred bit count can be set with the third parameter (useful, if you need to force installation of a 32-bit version in a 64-bit system).
 
