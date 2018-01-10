@@ -103,7 +103,7 @@ Removes the subdirectories. This is fully equivalent to manual deletion of the f
 Example: `pint remove "Subtitle Workshop"`
 
 ### `pint purge <dir> [<dir>]`
-Removes the subdirectories AND deletes corresponding archives from **dist**.
+Removes subdirectories AND corresponding archives from **dist**.
 
 Example: `pint purge foobar2000 1by1`
 
