@@ -242,7 +242,7 @@ If `link` is not defined, `data` is treated as a direct download URL to a file. 
 Must be either a full XPath expression, starting with // and searching for &lt;a&gt; elements, or a comma-separated list of words, expected to be found in a download URL.  
 **XPath example:** `//a[contains(@href, '.zip') and contains(@href, 'x86')]`  
 **Simplified syntax:** `.zip, x86`  
-To scan link texts, wrap words in quotes: *.zip, "portable"*  
+To scan link texts, wrap words in quotes: `.zip, "portable"`  
 Simplified queries are case-insensitive.
 
 There are some meta-values:  
@@ -253,7 +253,8 @@ There are some meta-values:
 All downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is `standalone`, which means the downloaded file will be copied as is without unpacking.
 
 ### `base`
-A base path inside an archive. To better explain this, I better tell, how this works. Once the archive is unpacked into a temporary directory, the script switches to that directory and retrieves a list of files. Then it goes line by line, until the `base` substring is found (it doesn't have to be a valid file or directory path, can be just a fragment). Once this substring is encountered, the working path changes to the directory, containing the file, where the search stopped. *Parent* directory of that file/dir will become the base path. Default `base` value is *.exe*, which means, that the first encountered directory with an .exe file will be used.
+A base path inside an archive. To better explain this, I better tell, how this works. Once the archive is unpacked into a temporary directory, the script switches to that directory and retrieves a list of files. Then it goes line by line, until the `base` substring is found (it doesn't have to be a valid file or directory path, can be just a fragment). Once this substring is encountered, the working path changes to the directory, containing the file, where the search stopped. *Parent* directory of that file/dir will become the base path.  
+Default `base` value is `.exe`, which means, that the first encountered directory with an .exe file will be used.
 
 ### `keep`
 Pint *replaces* contents of target directories, keeping files, listed in this parameter, intact. Typically, is used for configuration files. Must be a comma separated list of filenames/masks.  
@@ -267,6 +268,9 @@ Comma-separated lists of directores and files (respectively), which should be le
 
 ### `noshim`
 Pint automatically detects console applications and creates shim files for them. Files, listed in `noshim`, will be skipped.
+
+### `shim`
+Sometimes console app detector misses them. Add file names/masks to `shim` to force shim creation for them.
 
 ### `method`
 Set HTTP method for link request (GET by default).  
