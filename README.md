@@ -108,7 +108,7 @@ Removes subdirectories AND corresponding archives from **dist**.
 Example: `pint purge foobar2000 1by1`
 
 ### `pint cleanup`
-Deletes all downloaded installers and archives.
+Deletes all downloaded installers and archives from **dist**.
 
 ### `pint outdated [<dir> [<dir>]]`
 Checks for updates for the apps. With parameters omitted, Pint will check all installed apps.
