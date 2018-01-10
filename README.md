@@ -248,7 +248,9 @@ Simplified queries are case-insensitive.
 There are some meta-values:  
 `.arch` means any of the most popular archive formats (at the moment, it includes .7z, .zip, .rar, and .paf.exe),  
 `.any` is the same as `.arch` plus .exe.
-  
+
+Thanks to Xidel, JSON is supported. Consult [Xidel's documentation](http://www.videlibri.de/xidel.html#examples) (11. Reading JSON) on how to use the $json function. A few usage examples can also be found in [default database](https://d.vensko.net/pint/db/packages.ini).
+
 ### `type`
 All downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is `standalone`, which means the downloaded file will be copied as is without unpacking.
 
