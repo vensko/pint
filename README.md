@@ -64,7 +64,7 @@ Self-explanatory. Updates Pint to the latest version.
 If `<term>` is empty, yields a full list of app IDs from all databases.  
 If not, searches the databases for `<term>`.
 
-Example: `pint search 1by1`
+Example: `pint search xnview`
 
 ### `pint download <app> [<app>]`
 `<app>` is an ID from the `search` list. This downloads one or more apps into **dist** without unpacking them. All downloaded packages are stored with filenames in the format `<app>--<architecture>--<actual-filename>`.
@@ -83,7 +83,7 @@ Installs `<app>` into an arbitrary **apps** subdirectory. After installation, th
 
 Optionally, preferred bit count can be set with the third parameter (useful, if you need to force installation of a 32-bit version in a 64-bit system).
 
-Check [this chapter](#custom-install-destinations-installto) for examples.
+See [this chapter](#custom-install-destinations-installto) for examples.
 
 ### `pint list`
 Shows a full list of installed apps with some metadata.
