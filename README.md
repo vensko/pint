@@ -117,15 +117,15 @@ Tests given file, URL or app ID. Verifies remote file availability, content type
   
 # Custom install destinations (installto)
 In fact, Pint deals with app identifiers only during their download and/or installation. After that, all commands refer to actual subdirectories in **apps**, e.g.:
-- D:\Pint\apps\\**firefox**
-- D:\Pint\apps\\**foobar2000**
+- apps\\**firefox**
+- apps\\**foobar2000**
 
 To keep things simple, you may use only the `install` command. This way, database identifiers and subdirectories will always be the same. But if you prefer storing your browser in *apps\Mozilla Firefox* instead of *apps\firefox*, this can be done with `installto`:
 ```
 pint installto firefox "Mozilla Firefox"
 ```
 FF will be installed into
-- D:\Pint\apps\\**Mozilla Firefox**
+- apps\\**Mozilla Firefox**
 
 From this point, it will have to be referred to as "Mozilla Firefox":
 ```
@@ -144,7 +144,11 @@ pint installto winrar WinRAR\x86 32
 pint installto winrar WinRAR\x64 64
 ```
 Pint will handle both copies and update them using a correct archive.
-As can be seen via the `list` command, they'll be referred to as *WinRAR\x86* and *WinRAR\x64* respectively.
+As can be seen via the `list` command, they'll be referred to as *WinRAR\x86* and *WinRAR\x64* respectively:
+```
+pint pin WinRAR\x86
+pint upgrade WinRAR\x64
+```
 
 Absolute paths outside **apps** are allowed. They will not be visible in `list` and not automatically included by `upgrade` or `outdated`, because there is no database tracking their locations. To manage them, you'll always have to use absolute paths, e.g.
 ```
@@ -184,35 +188,45 @@ Use lowercase strings without spaces as application identifiers. They must be un
 
 By default, new app definitions can be added to local file packages.user.ini.
 
-**Available keys**
+## Available keys
 
-**dist** - if **link** is not defined, **data** is treated as a direct download URL to a file. If **link** is defined, the URL must point to a web page. The only mandatory key.
+### `dist`
+If `link` is not defined, `data` is treated as a direct download URL to a file. If `link` is defined, the URL must point to a web page. The only mandatory key.
 
-**link** - must be either a full XPath expression, starting with // and searching for &lt;a&gt; elements, or a comma-separated list of words, expected to be found in a download URL.  
-**XPath example:** *//a[contains(@href, '.zip') and contains(@href, 'x86')]*  
-**Simplified syntax:** *.zip, x86*  
-To scan link texts, wrap words in quotes: *.zip, "portable"*  
-Simplified queries are case-insensitive.  
-  
+### `link`
+Must be either a full XPath expression, starting with // and searching for &lt;a&gt; elements, or a comma-separated list of words, expected to be found in a download URL.
+**XPath example:** *//a[contains(@href, '.zip') and contains(@href, 'x86')]*
+**Simplified syntax:** *.zip, x86*
+To scan link texts, wrap words in quotes: *.zip, "portable"*
+Simplified queries are case-insensitive.
+
 There are some meta-values:  
-**.arch** means any of the most popular archive formats (at the moment, it includes .7z, .zip, .rar, and .paf.exe),  
-**.any** is the same as .arch plus .exe.  
+**.arch** means any of the most popular archive formats (at the moment, it includes .7z, .zip, .rar, and .paf.exe),
+**.any** is the same as .arch plus .exe.
   
-**type** - all downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is *standalone*, which means the downloaded file will be copied as is without unpacking.
+### `type`
+All downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is *standalone*, which means the downloaded file will be copied as is without unpacking.
 
-**base** - a base path inside an archive. To better explain this, I better tell, how this works. Once the archive is unpacked into a temporary directory, the script switches to that directory and retrieves a list of files. Then it goes line by line, until the **base** substring is found (it doesn't have to be a valid file or directory path, can be just a fragment). Once this substring is encountered, the working path changes to the directory, containing the file, where the search stopped. *Parent* directory of that file/dir will become the base path. Default **base** value is *.exe*, which means, that the first encountered directory with an .exe file will be used.
+### `base`
+A base path inside an archive. To better explain this, I better tell, how this works. Once the archive is unpacked into a temporary directory, the script switches to that directory and retrieves a list of files. Then it goes line by line, until the `base` substring is found (it doesn't have to be a valid file or directory path, can be just a fragment). Once this substring is encountered, the working path changes to the directory, containing the file, where the search stopped. *Parent* directory of that file/dir will become the base path. Default `base` value is *.exe*, which means, that the first encountered directory with an .exe file will be used.
 
-**keep** - Pint *replaces* contents of target directories, keeping files, listed in this parameter, intact. Typically, is used for configuration files. Must be a comma separated list of filenames/masks. Default value - \*.ini, \*.db.
+### `keep`
+Pint *replaces* contents of target directories, keeping files, listed in this parameter, intact. Typically, is used for configuration files. Must be a comma separated list of filenames/masks. Default value - \*.ini, \*.db.
 
-**only** - comma-separated list of files/masks, which should be copied. Useful for highly customizable apps, which typically contain a lot of custom assets - themes, plugins, etc.
+### `only`
+Comma-separated list of files/masks, which should be copied. Useful for highly customizable apps, which typically contain a lot of custom assets - themes, plugins, etc.
 
-**xd**, **xf** - comma-separated lists of directores and files (respectively), which should be left behind. These files will be neither removed from a target directory, nor copied from a temporary one. Pint uses Robocopy to copy files. These parameters are used as values for its /XD and /XF parameters. If **only** is set, these parameters are ignored.
+### `xd`, `xf`
+Comma-separated lists of directores and files (respectively), which should be left behind. These files will be neither removed from a target directory, nor copied from a temporary one. Pint uses Robocopy to copy files. These parameters are used as values for its /XD and /XF parameters. If `only` is set, these parameters are ignored.
 
-**noshim** - Pint automatically detects console applications and creates shim files for them. Files, listed in **noshim**, will be skipped.
+### `noshim`
+Pint automatically detects console applications and creates shim files for them. Files, listed in `noshim`, will be skipped.
 
-**method** - set HTTP method for link request (GET by default).  
+### `method`
+Set HTTP method for link request (GET by default).  
 
-**data** - if **method** is changed to POST, use this key to set custom payload in the x-www-form-urlencoded format.  
+### `data`
+If **method** is changed to POST, use this key to set custom payload in the x-www-form-urlencoded format.  
 
 Append *64* to a key to prefer it in a 64-bit system.
 ```
