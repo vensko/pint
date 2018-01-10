@@ -204,26 +204,27 @@ If `link` is not defined, `data` is treated as a direct download URL to a file. 
 
 ### `link`
 Must be either a full XPath expression, starting with // and searching for &lt;a&gt; elements, or a comma-separated list of words, expected to be found in a download URL.  
-**XPath example:** *//a[contains(@href, '.zip') and contains(@href, 'x86')]*  
-**Simplified syntax:** *.zip, x86*  
+**XPath example:** `//a[contains(@href, '.zip') and contains(@href, 'x86')]`  
+**Simplified syntax:** `.zip, x86`  
 To scan link texts, wrap words in quotes: *.zip, "portable"*  
 Simplified queries are case-insensitive.
 
 There are some meta-values:  
-**.arch** means any of the most popular archive formats (at the moment, it includes .7z, .zip, .rar, and .paf.exe),  
-**.any** is the same as .arch plus .exe.
+`.arch` means any of the most popular archive formats (at the moment, it includes .7z, .zip, .rar, and .paf.exe),  
+`.any` is the same as `.arch` plus .exe.
   
 ### `type`
-All downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is *standalone*, which means the downloaded file will be copied as is without unpacking.
+All downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is `standalone`, which means the downloaded file will be copied as is without unpacking.
 
 ### `base`
 A base path inside an archive. To better explain this, I better tell, how this works. Once the archive is unpacked into a temporary directory, the script switches to that directory and retrieves a list of files. Then it goes line by line, until the `base` substring is found (it doesn't have to be a valid file or directory path, can be just a fragment). Once this substring is encountered, the working path changes to the directory, containing the file, where the search stopped. *Parent* directory of that file/dir will become the base path. Default `base` value is *.exe*, which means, that the first encountered directory with an .exe file will be used.
 
 ### `keep`
-Pint *replaces* contents of target directories, keeping files, listed in this parameter, intact. Typically, is used for configuration files. Must be a comma separated list of filenames/masks. Default value - \*.ini, \*.db.
+Pint *replaces* contents of target directories, keeping files, listed in this parameter, intact. Typically, is used for configuration files. Must be a comma separated list of filenames/masks.  
+Default value: `*.ini, *.db`.
 
 ### `only`
-Comma-separated list of files/masks, which should be copied. Useful for highly customizable apps, which typically contain a lot of custom assets - themes, plugins, etc.
+Comma-separated list of files/masks, which should be copied. Useful for highly customizable apps, which typically contain a lot of custom assets: themes, plugins, etc.
 
 ### `xd`, `xf`
 Comma-separated lists of directores and files (respectively), which should be left behind. These files will be neither removed from a target directory, nor copied from a temporary one. Pint uses Robocopy to copy files. These parameters are used as values for its /XD and /XF parameters. If `only` is set, these parameters are ignored.
