@@ -34,15 +34,9 @@ To install Pint, save [pint.cmd](https://github.com/vensko/pint/raw/master/pint.
 - **apps** *a directory for your apps*
 - **apps\\.shims** *a directory for shims*
 - **dist** *a directory for downloaded archives and installers*
-- **deps** *a directory for Pint's dependencies*  
+- **deps** *a directory for Pint's dependencies*
 
-All paths are customisable, see the "Environment variables" chapter.  
-  
-There are also hard dependencies, installed automatically when needed:
-- [7-zip](http://www.7-zip.org/) - file archiver supporting a wide range of formats,
-- [Xidel](http://www.videlibri.de/xidel.html) - HTML/XML/JSON data extraction tool,
-- [innoextract](http://constexpr.org/innoextract/) - a tool to unpack installers created by Inno Setup,
-- [shimgen](https://github.com/chocolatey/choco/blob/master/src/chocolatey.resources/tools/shimgen.exe) - shim generator by Chocolatey team.
+All paths are customisable, see the [Environment variables](#environment-variables) chapter.
 
 # Requirements
 - Powershell 2.0+
@@ -50,11 +44,16 @@ There are also hard dependencies, installed automatically when needed:
 
 Both are shipped with Windows 7+.
 
+There are also hard dependencies, installed automatically when needed:
+- [7-zip](http://www.7-zip.org/) - file archiver supporting a wide range of formats,
+- [Xidel](http://www.videlibri.de/xidel.html) - HTML/XML/JSON data extraction tool,
+- [innoextract](http://constexpr.org/innoextract/) - unpacks installers created by Inno Setup,
+- [shimgen](https://github.com/chocolatey/choco/blob/master/src/chocolatey.resources/tools/shimgen.exe) - shim generator by Chocolatey team.
+
 # Usage
 ```
 pint <command> <parameters>
 ```
-All functions, prefixed with pint-\*, are available for external calls.
 
 ## Available commands
 
@@ -74,7 +73,7 @@ Downloads an archive (or a few) into **dist** and unpacks them into subdirectori
 
 ### `pint installto <app> <dir> [32|64]`
 Installs `<app>` into an **apps** subdirectory. After installation, the app directory can be renamed or moved anywhere under **apps** any way you wish, all installations are self-contained.
-Optionally, preferred bit count can be set with the third parameter (useful if you need to force installation of a 32-bit version in a 64-bit system).
+Optionally, preferred bit count can be set with the third parameter (useful, if you need to force installation of a 32-bit version in a 64-bit system).
 
 ### `pint list`
 Shows a full list of installed apps with some metadata.
@@ -152,14 +151,15 @@ pint upgrade WinRAR\x64
 
 Absolute paths outside **apps** are allowed. They will not be visible in `list` and not automatically included by `upgrade` or `outdated`, because there is no database tracking their locations. To manage them, you'll always have to use absolute paths, e.g.
 ```
-pint upgrade "E:\An\App\Outside\Pint"
+pint installto imagine "E:\Total Commander\Plugins\Imagine"
+pint upgrade "E:\Total Commander\Plugins\Imagine"
 ```
 
 # Environment variables
 Certain parameters of Pint can be overriden with the following environment variables. All paths must include names, therefore they can be renamed as well.
  - **PINT_APP_DIR** - absolute path to the *apps* directory.
  - **PINT_DIST_DIR** - absolute path to the *dist* directory.
- - **PINT_SHIM_DIR** - absolute path to the *shims* directory
+ - **PINT_SHIM_DIR** - absolute path to the *shims* directory. If changed, recreate shim files with `pint shims`.
  - **PINT_DEPS_DIR** - absolute path to the *deps* directory.
  - **PINT_DB** - comma-separated list of file paths and URLs to .ini files with app definitions.
  - **PINT_USER_AGENT** - Pint's user agent.
