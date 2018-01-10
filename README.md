@@ -10,7 +10,7 @@ Pint is a tool for the people who prefer unpacking over installing. Its primary 
 
 # Features
 - Downloads, unpacks and removes applications.
-- Checks for updates and downloads them if available.
+- Checks for updates and downloads them if available. Unlike Chocolatey and Scoop, Pint's databases do not require permanent attention by humans. Pint will automatically detect, download and install an update once it becomes available on a website.
 - Extracts download links from websites using [Xidel](http://www.videlibri.de/xidel.html).
 - Supports RSS and PAD files as link sources.
 - Unpacks various types of archives and installers and upgrades apps, keeping configuration files intact.
