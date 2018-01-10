@@ -113,7 +113,13 @@ Removes all shims files and recreates them.
 
 ### `pint test [<file.ini>|<app>] [32|64]`
 Tests given file, URL or app ID. Verifies remote file availability, content type and reported content length.
-  
+
+### `pint db`
+Dumps all database entries.
+
+### `pint unpack <file> <dir>`
+Unpack a file to a specified directory.
+
 # Custom install destinations (installto)
 In fact, Pint deals with app identifiers only during their download and/or installation. After that, all commands refer to actual subdirectories in **apps**, e.g.:
 - apps\\**firefox**
