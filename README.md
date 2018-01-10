@@ -203,14 +203,14 @@ By default, new app definitions can be added to local file packages.user.ini.
 If `link` is not defined, `data` is treated as a direct download URL to a file. If `link` is defined, the URL must point to a web page. The only mandatory key.
 
 ### `link`
-Must be either a full XPath expression, starting with // and searching for &lt;a&gt; elements, or a comma-separated list of words, expected to be found in a download URL.
-**XPath example:** *//a[contains(@href, '.zip') and contains(@href, 'x86')]*
-**Simplified syntax:** *.zip, x86*
-To scan link texts, wrap words in quotes: *.zip, "portable"*
+Must be either a full XPath expression, starting with // and searching for &lt;a&gt; elements, or a comma-separated list of words, expected to be found in a download URL.  
+**XPath example:** *//a[contains(@href, '.zip') and contains(@href, 'x86')]*  
+**Simplified syntax:** *.zip, x86*  
+To scan link texts, wrap words in quotes: *.zip, "portable"*  
 Simplified queries are case-insensitive.
 
 There are some meta-values:  
-**.arch** means any of the most popular archive formats (at the moment, it includes .7z, .zip, .rar, and .paf.exe),
+**.arch** means any of the most popular archive formats (at the moment, it includes .7z, .zip, .rar, and .paf.exe),  
 **.any** is the same as .arch plus .exe.
   
 ### `type`
