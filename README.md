@@ -121,10 +121,10 @@ Tests given file, URL or app ID. Verifies remote file availability, content type
 Dumps all database entries.
 
 ### `pint unpack <file> <dir>`
-Unpack a file to a specified directory.
+Unpacks a file to a specified directory.
 
 # Custom install destinations (installto)
-In fact, Pint deals with app identifiers only during their download and/or installation. After that, all commands refer to actual subdirectories in **apps**, e.g.:
+Pint deals with app identifiers only during their download and/or installation. After that, all commands refer to actual subdirectories in **apps**, e.g.:
 - apps\\**firefox**
 - apps\\**foobar2000**
 
