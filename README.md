@@ -61,8 +61,7 @@ pint <command> <parameters>
 Self-explanatory. Updates Pint to the latest version.
 
 ### `pint search [<term>]`
-If `<term>` is empty, yields a full list of app IDs from all databases listed in %PINT_DB%.
-
+If `<term>` is empty, yields a full list of app IDs from all databases.  
 If not, searches the databases for `<term>`.
 
 ### `pint download <app> [<app>]`
