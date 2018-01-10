@@ -62,10 +62,12 @@ Self-explanatory. Updates Pint to the latest version.
 
 ### `pint search [<term>]`
 If `<term>` is empty, yields a full list of app IDs from all databases listed in %PINT_DB%.
+
 If not, searches the databases for `<term>`.
 
 ### `pint download <app> [<app>]`
 `<app>` is an ID from the `search` list. This downloads one or more apps into **dist** without unpacking them. All downloaded packages are stored with filenames in the format `<app>--<architecture>--<actual-filename>`.
+
 Keep in mind, that the architecture attribute in Pint never refers to an actual bit count, but rather to a *preferred* value. If a 64-bit version of an app is not available yet and your processor is 64-bit, a 32-bit version will be downloaded and marked as 64. With a 64-bit version released, the app will be automatically upgraded from 32 to 64 bit.
 
 ### `pint install <app> [<app>]`
@@ -73,6 +75,7 @@ Downloads an archive (or a few) into **dist** and unpacks them into subdirectori
 
 ### `pint installto <app> <dir> [32|64]`
 Installs `<app>` into an **apps** subdirectory. After installation, the app directory can be renamed or moved anywhere under **apps** any way you wish, all installations are self-contained.
+
 Optionally, preferred bit count can be set with the third parameter (useful, if you need to force installation of a 32-bit version in a 64-bit system).
 
 ### `pint list`
