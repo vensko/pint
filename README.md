@@ -62,18 +62,18 @@ All functions, prefixed with pint-\*, are available for external calls.
 Self-explanatory. Updates Pint to the latest version.
 
 ### `pint search [<term>]`
-If `<term>` is empty, yields a full list of packages from all databases listed in %PINT_DB%.
+If `<term>` is empty, yields a full list of app IDs from all databases listed in %PINT_DB%.
 If not, searches the databases for `<term>`.
 
 ### `pint download <app> [<app>]`
-Downloads one or more apps into **dist** without unpacking them. All downloaded packages are stored with filenames in the format `<app>--<architecture>--<actual-filename>`.  
+`<app>` is an ID from the `search` list. This downloads one or more apps into **dist** without unpacking them. All downloaded packages are stored with filenames in the format `<app>--<architecture>--<actual-filename>`.
 Keep in mind, that the architecture attribute in Pint never refers to an actual bit count, but rather to a *preferred* value. If a 64-bit version of an app is not available yet and your processor is 64-bit, a 32-bit version will be downloaded and marked as 64. With a 64-bit version released, the app will be automatically upgraded from 32 to 64 bit.
 
 ### `pint install <app> [<app>]`
 Downloads an archive (or a few) into **dist** and unpacks them into subdirectories with corresponding names under **apps**.
 
 ### `pint installto <app> <dir> [32|64]`
-Installs the app into the given subdirectory. After installation, the app directory can be renamed or moved anywhere under **apps** any way you wish, all installations are self-contained.
+Installs `<app>` into an **apps** subdirectory. After installation, the app directory can be renamed or moved anywhere under **apps** any way you wish, all installations are self-contained.
 Optionally, preferred bit count can be set with the third parameter (useful if you need to force installation of a 32-bit version in a 64-bit system).
 
 ### `pint list`
@@ -143,8 +143,13 @@ To be able to manage this setup, run this:
 pint installto winrar WinRAR\x86 32
 pint installto winrar WinRAR\x64 64
 ```
-Pint will handle both copies and update them using a correct archive.  
-As can be seen via the `list` command, they'll be referred to as WinRAR\x86 and WinRAR\x64 respectively.
+Pint will handle both copies and update them using a correct archive.
+As can be seen via the `list` command, they'll be referred to as *WinRAR\x86* and *WinRAR\x64* respectively.
+
+Absolute paths outside **apps** are allowed. They will not be visible in `list` and not automatically included by `upgrade` or `outdated`, because there is no database tracking their locations. To manage them, you'll always have to use absolute paths, e.g.
+```
+pint upgrade "E:\An\App\Outside\Pint"
+```
 
 # Environment variables
 Certain parameters of Pint can be overriden with the following environment variables. All paths must include names, therefore they can be renamed as well.
@@ -209,9 +214,11 @@ There are some meta-values:
 
 **data** - if **method** is changed to POST, use this key to set custom payload in the x-www-form-urlencoded format.  
 
-Append *64* to a key to prefer it in a 64-bit system.  
-dist = http://example.com/archive.zip  
-dist64 = http://example.com/archive64.zip  
+Append *64* to a key to prefer it in a 64-bit system.
+```
+dist = http://example.com/archive.zip
+dist64 = http://example.com/archive64.zip
+```
 If a key has no a 64-bit counterpart, base name will be used as a fallback.
 
 # Alternatives
