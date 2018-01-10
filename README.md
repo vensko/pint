@@ -251,6 +251,10 @@ There are some meta-values:
 
 Thanks to Xidel, JSON is supported. Consult [Xidel's documentation](http://www.videlibri.de/xidel.html#examples) (11. Reading JSON) on how to use the $json function. A few usage examples can also be found in [default database](https://d.vensko.net/pint/db/packages.ini).
 
+### `follow`
+When a download requires following through one or more web pages, set `follow` value to a list of consequent queries (same way as `link`), separated by |, leading to a page with a download link. `link` is still needed, when `follow` is set.  
+Example: `"click here" | "go to download page"`
+
 ### `type`
 All downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is `standalone`, which means the downloaded file will be copied as is without unpacking.
 
