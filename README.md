@@ -64,18 +64,26 @@ Self-explanatory. Updates Pint to the latest version.
 If `<term>` is empty, yields a full list of app IDs from all databases.  
 If not, searches the databases for `<term>`.
 
+Example: `pint search 1by1`
+
 ### `pint download <app> [<app>]`
 `<app>` is an ID from the `search` list. This downloads one or more apps into **dist** without unpacking them. All downloaded packages are stored with filenames in the format `<app>--<architecture>--<actual-filename>`.
 
 Keep in mind, that the architecture attribute in Pint never refers to an actual bit count, but rather to a *preferred* value. If a 64-bit version of an app is not available yet and your processor is 64-bit, a 32-bit version will be downloaded and marked as 64. With a 64-bit version released, the app will be automatically upgraded from 32 to 64 bit.
 
+Example: `pint download xnview foobar2000`
+
 ### `pint install <app> [<app>]`
 Downloads an archive (or a few) into **dist** and unpacks them into subdirectories with corresponding names under **apps**.
+
+Example: `pint install foobar2000`
 
 ### `pint installto <app> <dir> [32|64]`
 Installs `<app>` into an arbitrary **apps** subdirectory. After installation, the app directory can be renamed or moved anywhere under **apps** any way you wish, all installations are self-contained. Check `pint l` for a changed `<dir>` value.
 
 Optionally, preferred bit count can be set with the third parameter (useful, if you need to force installation of a 32-bit version in a 64-bit system).
+
+Check [this chapter](#custom-install-destinations-installto) for examples.
 
 ### `pint list`
 Shows a full list of installed apps with some metadata.
@@ -87,11 +95,17 @@ If the `pint list` table becomes too large, this may be a faster way to check di
 ### `pint reinstall <dir> [<dir>]`
 Forces reinstallation of the apps.
 
+Example: `pint reinstall foobar2000 "Subtitle Workshop"`
+
 ### `pint remove <dir> [<dir>]`
 Removes the subdirectories. This is fully equivalent to manual deletion of the folders.
 
+Example: `pint remove "Subtitle Workshop"`
+
 ### `pint purge <dir> [<dir>]`
 Removes the subdirectories AND deletes corresponding archives from **dist**.
+
+Example: `pint purge foobar2000 1by1`
 
 ### `pint cleanup`
 Deletes all downloaded installers and archives.
@@ -99,17 +113,27 @@ Deletes all downloaded installers and archives.
 ### `pint outdated [<dir> [<dir>]]`
 Checks for updates for the apps. With parameters omitted, Pint will check all installed apps.
 
+Example: `pint outdated 7-zip`
+
 ### `pint upgrade [<dir> [<dir>]]`
 Checks for updates AND installs them if available. Same here, without parameters this will try to upgrade everything.
+
+Example: `pint upgrade foobar2000 1by1 7-zip`
 
 ### `pint forget <dir> [<dir>]`
 Pint never touches subdirectories, where it hadn't installed anything previously. Subdirectories with manually installed apps will simply be ignored. This command removes Pint's metadata from the subdirectories. To make them manageable again, use `installto`.
 
+Example: `pint forget 7-zip`
+
 ### `pint pin <dir> [<dir>]`
 Keeps Pint's metadata yet suppresses automatic updates for the apps.
 
+Example: `pint pin 7-zip`
+
 ### `pint unpin <dir> [<dir>]`
 Allows automatic updates (undoes `pin`).
+
+Example: `pint unpin 7-zip`
 
 ### `pint shims`
 Removes all shims files and recreates them.
@@ -117,11 +141,17 @@ Removes all shims files and recreates them.
 ### `pint test [<file.ini>|<app>] [32|64]`
 Tests given file, URL or app ID. Verifies remote file availability, content type and reported content length.
 
+Examples:  
+`pint test "D:\my-packages.ini"`  
+`pint test foobar2000`
+
 ### `pint db`
 Dumps all database entries.
 
 ### `pint unpack <file> <dir>`
 Unpacks a file to a specified directory.
+
+Example: `pint unpack "D:\foobar2000.zip" "D:\foobar2000"`
 
 # Custom install destinations (installto)
 Pint deals with app identifiers only during their download and/or installation. After that, all commands refer to actual subdirectories in **apps**, e.g.:
