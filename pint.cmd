@@ -124,11 +124,9 @@ function ini-section([string]$section)
 
 function get-text($src)
 {
-	try {
-		$client = new-object Net.WebClient
-		$client.Headers['User-Agent'] = $env:PINT_USER_AGENT
-		$client.DownloadString($src)
-	} catch {}
+	$client = new-object Net.WebClient
+	$client.Headers['User-Agent'] = $env:PINT_USER_AGENT
+	$client.DownloadString($src)
 }
 
 function pint-make-ftp-request([string]$url, [bool]$download)
@@ -594,28 +592,36 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 function pint-db
 {
 	$db = $global:dependencies
-	$src = clist $env:PINT_DB
-
-	if (!($env:PINT_DB).contains('://')) {
-		return $db + ($src |% { "`n" + (get-text $_) })
-	}
-
-	$cache = $env:PINT_DB_CACHE
 	$timespan = new-timespan -days 1
 
-	if ($env:PINT_DEV -or !(is-file $cache) -or (get-date) - (gi $cache).LastWriteTime -gt $timespan) {
-		$db += $src |% { "`n" + (get-text $_) }
-		$db | out-file $cache
-		return $db
+	clist $env:PINT_DB |% {
+		try {
+			$url = $file = $_
+
+			if ($file.contains('://')) {
+				$cache = $_ -replace '[^\w]', ''
+				$file = join-path $env:TEMP "pint-cache-$cache.ini"
+
+				if ($env:PINT_DEV -or !(is-file $file) -or (get-date) - (gi $file).LastWriteTime -gt $timespan) {
+					$text = get-text $_
+					$text | out-file $file -encoding ascii
+				}
+			}
+
+			$db += "`n" + (get-text $file)
+		} catch {
+			write-host $_.Exception.InnerException.Message ' ' $url -f red
+			return
+		}
 	}
 
-	get-text $cache
+	$db
 }
 
 function pint-reinstall
 {
 	if (!$args.count) {
-		write-host 'Set a directory to reinstall.'
+		write-host 'Specify a directory to reinstall.'
 		return
 	}
 
@@ -638,7 +644,7 @@ function pint-reinstall
 function pint-download
 {
 	if (!$args.count) {
-		write-warning 'Set an ID to download.'
+		write-warning 'Specify an ID to download.'
 		return
 	}
 
@@ -654,7 +660,7 @@ function pint-download
 function pint-install
 {
 	if (!$args.count) {
-		write-warning 'Set an ID to install.'
+		write-warning 'Specify an ID to install.'
 		return
 	}
 
@@ -665,7 +671,7 @@ function pint-installto([string]$id, [string]$dir, [string]$arch = $global:arch)
 {
 	try {
 		if (!$id -or !$dir) {
-			write-host 'Set an ID and a destination directory.'
+			write-host 'Specify an ID and a destination directory.'
 			return
 		}
 
@@ -684,7 +690,7 @@ function pint-installto([string]$id, [string]$dir, [string]$arch = $global:arch)
 function pint-purge
 {
 	if (!$args.count) {
-		write-warning 'Set a directory to purge.'
+		write-warning 'Specify a directory to purge.'
 		return
 	}
 
@@ -700,7 +706,7 @@ function pint-purge
 function pint-remove
 {
 	if (!$args.count) {
-		write-warning 'Set a directory to remove.'
+		write-warning 'Specify a directory to remove.'
 		return
 	}
 
@@ -982,7 +988,7 @@ function pint-usage
 		@('forget <dir>', 'Stop tracking of selected apps.'),
 		@('download <app>', 'Only download selected installers without unpacking them.'),
 		@('shims', 'Recreate all shim files.'),
-		@('test [<app>|<file.ini>] [32|64]', 'Test app definitions.'),
+		@('test [<app>|<file.ini>] [32|64] ', 'Test app definitions.'),
 		@('db', 'Output all database entries.'),
 		@('unpack <file> <path>', 'Extract a file to a specified directory.')
 	) |% {
