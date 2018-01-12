@@ -83,7 +83,7 @@ Installs `<app>` into an arbitrary **apps** subdirectory. After installation, th
 
 Optionally, preferred bit count can be set with the third parameter (useful, if you need to force installation of a 32-bit version in a 64-bit system).
 
-Example: `pint installto subtitle-workshop "Subtitle Workshop"`
+Example: `pint installto subtitle-workshop "Subtitle Workshop"`  
 For more examples, see [this chapter](#custom-install-destinations-installto).
 
 ### `pint list`
