@@ -208,7 +208,7 @@ Certain parameters of Pint can be overriden with the following environment varia
  - **PINT_USER_AGENT** - Pint's user agent.
  - **PINT_CACHE_TTL** - remote sources are updated once in %PINT_CACHE_TTL% hours, set to 0 to disable the cache.
 
-The easiest way to override environment variables is to use a proxy batch file with your parameters, something like this:
+The easiest way to override environment variables is to use a proxy .bat file with your parameters, something like this:
 ```
 @echo off
 SET "PINT_APP_DIR=D:\Apps"
