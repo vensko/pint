@@ -117,8 +117,7 @@ function pint-info([string]$section)
 	$m = [regex]::Matches((pint-db), "\[$section\](((?!\n\[).)+)", 'Singleline,IgnoreCase')
 
 	if (!$m.count) {
-		write-host "Unable to find '$section' in the database." -f red
-		return $null
+		throw "Unable to find '$section' in the database."
 	}
 
 	$res = @{}
@@ -560,10 +559,11 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 				}
 			}
 		} else {
-			$xf = $meta.xf + ' *.pint $R0'
-			$xd = $meta.xd + ' $0 $PLUGINSDIR $TEMP $_OUTDIR'
+			$purge = if ($meta.purge -eq 'false') {''} else {'/PURGE'}
+			$xf = ([string]$meta.xf).replace(',', ' ') + ' *.pint $R0'
+			$xd = ([string]$meta.xd).replace(',', ' ') + ' $0 $PLUGINSDIR $TEMP $_OUTDIR'
 
-			& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /E /PURGE /NJS /NJH /NFL /NDL /NC /NP /NS /R:2 /W:2 /XO /FFT /XF $xf /XD $xd" | out-null
+			& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /S /NJS /NJH /NFL /NDL /NC /NP /NS /R:2 /W:2 /XO /FFT $purge /XF $xf /XD $xd" | out-null
 
 			if ($lastexitcode -gt 7) {
 				write-host "Detected errors while copying from $pwd with Robocopy (code $lastexitcode)."
@@ -980,7 +980,7 @@ function pint-test([string]$subject, [string]$arch = $global:arch)
 	}
 }
 
-function pint-usage
+function pint-help
 {
 	write-host "PINT - Portable INsTaller`n" -f white
 	write-host "Usage:"
@@ -1020,7 +1020,7 @@ function pint-usage
 
 function pint-start($cmd)
 {
-	if (!$cmd) { pint-usage; exit 0 }
+	if (!$cmd) { pint-help; exit 0 }
 
 	$cmd = 'pint-' + $cmd
 

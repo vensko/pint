@@ -79,7 +79,7 @@ Downloads an archive (or a few) into **dist** and unpacks them into subdirectori
 Example: `pint install foobar2000`
 
 ### `pint installto <app> <dir> [32|64]`
-Installs `<app>` into an arbitrary **apps** subdirectory. After installation, the app directory can be renamed or moved anywhere under **apps** any way you wish, all installations are self-contained. Check `pint l` for a changed `<dir>` value.
+Installs `<app>` into an arbitrary **apps** subdirectory. After installation, the app directory can be renamed or moved anywhere under **apps**, all installations are self-contained. Check `pint l` for a changed `<dir>` value.
 
 Optionally, preferred bit count can be set with the third parameter (useful, if you need to force installation of a 32-bit version in a 64-bit system).
 
@@ -278,19 +278,22 @@ Pint *replaces* contents of target directories, keeping files, listed in this pa
 Default value: `*.ini, *.db`.
 
 ### `only`
-Comma-separated list of files/masks, which should be copied. Useful for highly customizable apps, which typically contain a lot of custom assets: themes, plugins, etc.
-
-### `create`
-To enable portable mode, some applications require particular files to be created. These files can be listed in `create`.
+Comma-separated list of specific files/masks, which should be copied.
 
 ### `xd`, `xf`
 Comma-separated lists of directores and files (respectively), which should be left behind. These files will be neither removed from a target directory, nor copied from a temporary one. Pint uses Robocopy to copy files. These parameters are used as values for its /XD and /XF parameters. If `only` is set, these parameters are ignored.
+
+### `purge`
+If set to `false`, Pint only copies new files to a target directory instead of full replacement (the /PURGE parameter for robocopy).
 
 ### `noshim`
 Pint automatically detects console applications and creates shim files for them. Files, listed in `noshim`, will be skipped.
 
 ### `shim`
 Sometimes console app detector misses them. Add file names/masks to `shim` to force shim creation for them.
+
+### `create`
+To enable portable mode, some applications require particular files to be created. These files can be listed in `create`.
 
 ### `method`
 Set HTTP method for link request (GET by default).  
