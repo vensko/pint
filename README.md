@@ -211,7 +211,7 @@ App definitions are described in INI format. File paths and URLs to .ini files a
 
 Feel free to override PINT_DB with your own app sources.
 
-# INI format
+## INI format
 Each app is described in a separate section:
 ```
 [app-id]
