@@ -578,6 +578,15 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 		$version = "v$version"
 	}
 
+	if ($meta.create) {
+		clist $meta.create |% {
+			if ($createdir = split-path $_) {
+				ensure-dir $createdir
+			}
+			ni (join-path $destDir $_) -type file -force | out-null
+		}
+	}
+
 	$pintFile = (@($id, $version, $arch, $item.length) |? {$_}) -join ' '
 	$pintFile = join-path $destDir "$pintFile.pint"
 

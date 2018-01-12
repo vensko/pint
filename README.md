@@ -269,6 +269,9 @@ Default value: `*.ini, *.db`.
 ### `only`
 Comma-separated list of files/masks, which should be copied. Useful for highly customizable apps, which typically contain a lot of custom assets: themes, plugins, etc.
 
+### `create`
+To enable portable mode, some applications require particular files to be created. These files can be listed in `create`.
+
 ### `xd`, `xf`
 Comma-separated lists of directores and files (respectively), which should be left behind. These files will be neither removed from a target directory, nor copied from a temporary one. Pint uses Robocopy to copy files. These parameters are used as values for its /XD and /XF parameters. If `only` is set, these parameters are ignored.
 
