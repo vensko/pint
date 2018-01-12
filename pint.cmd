@@ -257,7 +257,7 @@ function has-dependency([string]$id)
 	is-file (join-path $env:PINT_DEPS_DIR "$id\$id.exe")
 }
 
-function pint-unpack([string]$file, [string]$dir)
+function pint-unpack([string]$file, [string]$dir, [string]$type)
 {
 	$item = gi $file
 	$file = $item.fullname
@@ -269,7 +269,7 @@ function pint-unpack([string]$file, [string]$dir)
 			& $env:ComSpec /d /c "msiexec /a `"$file`" /norestart /qn TARGETDIR=`"$dir`""
 			break
 		}
-		{($_ -eq '.exe') -and (select-string -path $file -pattern 'Inno Setup')} {
+		{($type -eq 'inno') -or (($_ -eq '.exe') -and (select-string -path $file -pattern 'Inno Setup'))} {
 			& (get-dependency 'innoextract') -s -c -p -d $dir $file
 			break
 		}
@@ -285,7 +285,8 @@ function pint-unpack([string]$file, [string]$dir)
 			} catch {}
 		}
 		{$true} {
-			& $env:ComSpec /d /c "`"$(get-dependency '7z')`" x -y -bd -bso0 -bsp0 -aoa -o`"$dir`" `"$file`""
+			$type = if ($type) {"-t$type"} else {''}
+			& $env:ComSpec /d /c "`"$(get-dependency '7z')`" x $type -y -bd -bso0 -bsp0 -aoa -o`"$dir`" `"$file`""
 		}
 	}
 }
@@ -293,7 +294,9 @@ function pint-unpack([string]$file, [string]$dir)
 function pint-get-version([string]$dir)
 {
 	try {
-		$v = (dir $dir -r -filter *.exe -ea 1 | sort length -desc | select -first 1).VersionInfo.ProductVersion.trim()
+		$files = dir $dir -filter *.exe -ea 0
+		if (!$files) { $files = dir $dir -r -filter *.exe -ea 1 }
+		$v = ($files | sort length -desc | select -first 1).VersionInfo.ProductVersion.trim()
 		$v = $v.replace(', ', '.').replace(',', '.')
 		$v = ($v -split '[- ]+', 2)[0]
 		if (!($v -match "^[0-9\.]+$")) { return }
@@ -495,7 +498,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 		$tempDir = join-path $env:TEMP "pint-$id-$(get-random)"
 		ensure-dir $tempDir
 
-		pint-unpack $file $tempDir
+		pint-unpack $file $tempDir $meta.type
 
 		cd $tempDir
 
@@ -516,6 +519,10 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 			clist $meta.keep
 		} else {
 			@('*.ini','*.db')
+		}
+
+		if ($meta.create) {
+			$keep += clist $meta.create
 		}
 
 		$params = @{

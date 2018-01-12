@@ -267,7 +267,12 @@ When a download requires following through one or more web pages, set `follow` v
 Example: `"click here" | "go to download page"`
 
 ### `type`
-All downloaded files are considered archives, unless this parameter is set. Currently, the only possible value is `standalone`, which means the downloaded file will be copied as is without unpacking.
+Possible values:
+- `standalone` - downloaded file will be considered an executable and will be copied as is with filename equal to app id.
+- `inno` - force installer type to Inno Setup.
+- `zip`, `cab`, etc. - any format, supported by 7-zip.
+
+Usually, type enforcement is not needed, use it only when autodetection fails.
 
 ### `base`
 A base path inside an archive. To better explain this, I better tell, how this works. Once the archive is unpacked into a temporary directory, the script switches to that directory and retrieves a list of files. Then it goes line by line, until the `base` substring is found (it doesn't have to be a valid file or directory path, can be just a fragment). Once this substring is encountered, the working path changes to the directory, containing the file, where the search stopped. *Parent* directory of that file/dir will become the base path.  
