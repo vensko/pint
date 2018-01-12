@@ -15,6 +15,7 @@ if not defined PINT_DEPS_DIR set "PINT_DEPS_DIR=%~dp0deps"
 if not defined PINT_SHIM_DIR set "PINT_SHIM_DIR=%PINT_APP_DIR%\.shims"
 if not defined PINT_USER_AGENT set "PINT_USER_AGENT=PintBot/1.0 (+https://github.com/vensko/pint)"
 if not defined PINT_DB set "PINT_DB=https://d.vensko.net/pint/db/packages.ini,%~dp0packages.user.ini"
+if not defined PINT_CACHE_TTL set "PINT_CACHE_TTL=24"
 
 rem Start 64bit PowerShell even from 32bit command line
 SET "POWERSHELL=%SystemRoot%\sysnative\windowspowershell\v1.0\powershell.exe"
@@ -33,6 +34,7 @@ end Batch / begin PowerShell #>
 $global:httpMaxRedirects = 5
 $global:httpTimeout = 15000
 $global:arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'x86') {32} else {64}
+$global:db = ''
 
 $global:dependencies = @"
 [xidel]
@@ -590,18 +592,22 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 
 function pint-db
 {
+	if ($global:db) {
+		return $global:db
+	}
+
 	$db = $global:dependencies
-	$timespan = new-timespan -days 1
+	$timespan = new-timespan -hours $env:PINT_CACHE_TTL
 
 	clist $env:PINT_DB |% {
 		try {
 			$url = $file = $_
 
-			if ($file.contains('://')) {
+			if ($file.contains('://') -and $env:PINT_CACHE_TTL -gt 0) {
 				$cache = $_ -replace '[^\w]', ''
 				$file = join-path $env:TEMP "pint-cache-$cache.ini"
 
-				if ($env:PINT_DEV -or !(is-file $file) -or (get-date) - (gi $file).LastWriteTime -gt $timespan) {
+				if (!(is-file $file) -or (get-date) - (gi $file).LastWriteTime -gt $timespan) {
 					$text = get-text $_
 					$text | out-file $file -encoding ascii
 				}
@@ -614,7 +620,7 @@ function pint-db
 		}
 	}
 
-	$db
+	($global:db = $db)
 }
 
 function pint-reinstall
@@ -940,7 +946,7 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, [bool]$del
 
 function pint-test([string]$subject, [string]$arch = $global:arch)
 {
-	$env:PINT_DEV = $true
+	$env:PINT_CACHE_TTL = 0
 
 	$list = if ($subject -match '[:\.]') {
 		ini-get-sections (get-text $subject)

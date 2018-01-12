@@ -202,7 +202,7 @@ Certain parameters of Pint can be overriden with the following environment varia
  - **PINT_DEPS_DIR** - absolute path to the *deps* directory.
  - **PINT_DB** - comma-separated list of file paths and URLs to .ini files with app definitions.
  - **PINT_USER_AGENT** - Pint's user agent.
- - **PINT_DEV** - remote sources are updated once a day, this flag disables the cache.
+ - **PINT_CACHE_TTL** - remote sources are updated once in %PINT_CACHE_TTL% hours, set to 0 to disable the cache.
 
 # Databases
 App definitions are described in INI format. File paths and URLs to .ini files are passed to Pint via the PINT_DB environment variable as a comma-separated list. By default, there are two registered databases:
