@@ -83,7 +83,8 @@ Installs `<app>` into an arbitrary **apps** subdirectory. After installation, th
 
 Optionally, preferred bit count can be set with the third parameter (useful, if you need to force installation of a 32-bit version in a 64-bit system).
 
-See [this chapter](#custom-install-destinations-installto) for examples.
+Example: `pint installto subtitle-workshop "Subtitle Workshop"`
+For more examples, see [this chapter](#custom-install-destinations-installto).
 
 ### `pint list`
 Shows a full list of installed apps with some metadata.
@@ -206,6 +207,13 @@ Certain parameters of Pint can be overriden with the following environment varia
  - **PINT_DB** - comma-separated list of file paths and URLs to .ini files with app definitions.
  - **PINT_USER_AGENT** - Pint's user agent.
  - **PINT_CACHE_TTL** - remote sources are updated once in %PINT_CACHE_TTL% hours, set to 0 to disable the cache.
+
+The easiest way to override environment variables is to use a proxy batch file with your parameters, something like this:
+```
+@echo off
+SET "PINT_APP_DIR=D:\Apps"
+call "D:\pint.cmd" %*
+```
 
 # Databases
 App definitions are described in INI format. File paths and URLs to .ini files are passed to Pint via the PINT_DB environment variable as a comma-separated list. By default, there are two registered databases:
