@@ -145,6 +145,9 @@ Examples:
 `pint test "D:\my-packages.ini"`  
 `pint test foobar2000`
 
+### `pint info <app>`
+Show package configuration.
+
 ### `pint db`
 Dumps all database entries.
 

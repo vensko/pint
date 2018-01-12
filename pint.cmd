@@ -112,15 +112,20 @@ function ini-get-sections([string]$ini, [string]$search)
 	[regex]::Matches($ini, "(?:^|\n)\[(.*?$search.*?)\]", 'IgnoreCase') |% {$_.groups[1].value} | get-unique
 }
 
-function ini-section([string]$section)
+function pint-info([string]$section)
 {
 	$m = [regex]::Matches((pint-db), "\[$section\](((?!\n\[).)+)", 'Singleline,IgnoreCase')
-	if (!$m.count) { return $null }
+
+	if (!$m.count) {
+		write-host "Unable to find '$section' in the database." -f red
+		return $null
+	}
+
 	$res = @{}
 	[regex]::Matches($m[$m.count-1].groups[1].value, "^\s*(\w+?)\s*=\s*(.+)\s*$", 'm') |% {
 		$res[$_.groups[1].value] = $_.groups[2].value.trim()
 	}
-	if ($res.keys.count) {$res} else {$null}
+	$res
 }
 
 function get-text($src)
@@ -345,11 +350,7 @@ function pint-get-installed-app([string]$p)
 
 function pint-get-app-meta([string]$id, [string]$arch = $global:arch)
 {
-	$ini = ini-section $id
-
-	if (!$ini) {
-		throw "Unable to find '$id' in the database."
-	}
+	$ini = pint-info $id
 
 	$res = @{}
 	$ini.keys | sort |% {
@@ -1005,6 +1006,7 @@ function pint-usage
 		@('download <app>', 'Only download selected installers without unpacking them.'),
 		@('shims', 'Recreate all shim files.'),
 		@('test [<app>|<file.ini>] [32|64] ', 'Test app definitions.'),
+		@('info <app>', 'Show package configuration.'),
 		@('db', 'Output all database entries.'),
 		@('unpack <file> <path>', 'Extract a file to a specified directory.')
 	) |% {
