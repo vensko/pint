@@ -109,7 +109,7 @@ function string-to-xpath([string]$str, [bool]$rss)
 
 function ini-get-sections([string]$ini, [string]$search)
 {
-	[regex]::Matches($ini, "(^|\n)\[(.*?$search.*?)\]", 'IgnoreCase') |% {$_.groups[2].value} | get-unique
+	[regex]::Matches($ini, "(?:^|\n)\[(.*?$search.*?)\]", 'IgnoreCase') |% {$_.groups[1].value} | get-unique
 }
 
 function ini-section([string]$section)
@@ -613,7 +613,9 @@ function pint-db
 				}
 			}
 
-			$db += "`n" + (get-text $file)
+			if (is-file $file) {
+				$db += "`n" + (get-text $file)
+			}
 		} catch {
 			write-host $_.Exception.InnerException.Message ' ' $url -f red
 			return
