@@ -14,7 +14,7 @@ if not defined PINT_APP_DIR set "PINT_APP_DIR=%~dp0apps"
 if not defined PINT_DEPS_DIR set "PINT_DEPS_DIR=%~dp0deps"
 if not defined PINT_SHIM_DIR set "PINT_SHIM_DIR=%PINT_APP_DIR%\.shims"
 if not defined PINT_USER_AGENT set "PINT_USER_AGENT=PintBot/1.0 (+https://github.com/vensko/pint)"
-if not defined PINT_DB set "PINT_DB=https://d.vensko.net/pint/db/packages.ini,%~dp0packages.user.ini"
+if not defined PINT_DB set "PINT_DB=https://d.vensko.net/pint/db/packages.ini, https://d.vensko.net/pint/db/portableapps.com.ini, %~dp0packages.user.ini"
 if not defined PINT_CACHE_TTL set "PINT_CACHE_TTL=24"
 
 rem Start 64bit PowerShell even from 32bit command line
@@ -294,8 +294,8 @@ function pint-unpack([string]$file, [string]$dir, [string]$type)
 function pint-get-version([string]$dir)
 {
 	try {
-		$files = dir $dir -filter *.exe -ea 0
-		if (!$files) { $files = dir $dir -r -filter *.exe -ea 1 }
+		$files = dir $dir -filter *.exe -exclude *portable.exe -ea 0
+		if (!$files) { $files = dir $dir -r -filter *.exe -exclude *portable.exe -ea 1 }
 		$v = ($files | sort length -desc | select -first 1).VersionInfo.ProductVersion.trim()
 		$v = $v.replace(', ', '.').replace(',', '.')
 		$v = ($v -split '[- ]+', 2)[0]
@@ -570,7 +570,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 			$xf = ([string]$meta.xf).replace(',', ' ') + ' *.pint $R0'
 			$xd = ([string]$meta.xd).replace(',', ' ') + ' $0 $PLUGINSDIR $TEMP $_OUTDIR'
 
-			& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /E /NJS /NJH /NFL /NDL /NC /NP /NS /R:2 /W:2 /XO /FFT $purge /XF $xf /XD $xd" | out-null
+			& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /E /NJS /NJH /NFL /NDL /NC /NP /NS /R:1 /W:1 /XO /FFT $purge /XF $xf /XD $xd" | out-null
 
 			if ($lastexitcode -gt 7) {
 				write-host "Detected errors while copying from $pwd with Robocopy (code $lastexitcode)."
@@ -889,7 +889,7 @@ function pint-unpin
 
 function pint-search([string]$term)
 {
-	ini-get-sections (pint-db) $term
+	ini-get-sections (pint-db) $term | sort
 }
 
 function pint-cleanup
