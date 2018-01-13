@@ -970,7 +970,8 @@ function pint-test([string]$subject, [string]$arch = $global:arch)
 	$env:PINT_CACHE_TTL = 0
 
 	$list = if ($subject -match '[:\.]') {
-		ini-get-sections (get-text $subject)
+		$global:db = get-text $subject
+		ini-get-sections $global:db
 	} else {
 		pint-search $subject
 	}
