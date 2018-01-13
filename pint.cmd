@@ -570,7 +570,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 			$xf = ([string]$meta.xf).replace(',', ' ') + ' *.pint $R0'
 			$xd = ([string]$meta.xd).replace(',', ' ') + ' $0 $PLUGINSDIR $TEMP $_OUTDIR'
 
-			& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /S /NJS /NJH /NFL /NDL /NC /NP /NS /R:2 /W:2 /XO /FFT $purge /XF $xf /XD $xd" | out-null
+			& $env:COMSPEC /d /c "robocopy `"$pwd`" `"$destDir`" /E /NJS /NJH /NFL /NDL /NC /NP /NS /R:2 /W:2 /XO /FFT $purge /XF $xf /XD $xd" | out-null
 
 			if ($lastexitcode -gt 7) {
 				write-host "Detected errors while copying from $pwd with Robocopy (code $lastexitcode)."
