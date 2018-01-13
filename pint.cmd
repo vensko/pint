@@ -620,19 +620,21 @@ function pint-db
 		try {
 			$url = $file = $_
 
-			if ($file.contains('://') -and $env:PINT_CACHE_TTL -gt 0) {
-				$cache = $_ -replace '[^\w]', ''
-				$file = join-path $env:TEMP "pint-cache-$cache.ini"
+			if ($file.contains('://')) {
+				if ($env:PINT_CACHE_TTL -gt 0) {
+					$cache = $_ -replace '[^\w]', ''
+					$file = join-path $env:TEMP "pint-cache-$cache.ini"
 
-				if (!(is-file $file) -or (get-date) - (gi $file).LastWriteTime -gt $timespan) {
-					$text = get-text $_
-					$text | out-file $file -encoding ascii
+					if (!(is-file $file) -or (get-date) - (gi $file).LastWriteTime -gt $timespan) {
+						$text = get-text $_
+						$text | out-file $file -encoding ascii
+					}
 				}
+			} elseif (!(is-file $file)) {
+				return
 			}
 
-			if (is-file $file) {
-				$db += "`n" + (get-text $file)
-			}
+			$db += "`n" + (get-text $file)
 		} catch {
 			write-host $_.Exception.InnerException.Message ' ' $url -f red
 			return
