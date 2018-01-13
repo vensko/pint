@@ -114,7 +114,7 @@ function ini-get-sections([string]$ini, [string]$search)
 
 function pint-info([string]$section)
 {
-	$m = [regex]::Matches((pint-db), "\[$section\](((?!\n\[).)+)", 'Singleline,IgnoreCase')
+	$m = [regex]::Matches((pint-db), "(?:^|\n)\[$section\](((?!\n\[).)+)", 'Singleline,IgnoreCase')
 
 	if (!$m.count) {
 		throw "Unable to find '$section' in the database."
