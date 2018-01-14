@@ -409,7 +409,7 @@ function get-dist-link([Hashtable]$meta, [bool]$verbose)
 					'--follow "(//a[' + (string-to-xpath $_).replace('"', "\`"") + '])[1]"'
 				}) -join ' '
 			} else {
-				$follow = $follow.replace('"', "\`"").replace(' | ', '" --follow "')
+				$follow = $follow.replace('"', "\`"") -replace '\s*\|\s*','" --follow "'
 				$follow = " --follow `"$follow`""
 			}
 		}
@@ -588,10 +588,13 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 
 	if ($meta.create) {
 		clist $meta.create |% {
-			if ($createdir = split-path $_) {
-				ensure-dir $createdir
+			$createfile = join-path $destDir $_
+			if (!(is-file $createfile)) {
+				if ($createdir = split-path $_) {
+					ensure-dir $createdir
+				}
+				ni (join-path $destDir $_) -type file -force | out-null
 			}
-			ni (join-path $destDir $_) -type file -force | out-null
 		}
 	}
 
