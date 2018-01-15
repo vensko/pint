@@ -214,7 +214,7 @@ function get-text($src)
 
 function pint-make-ftp-request([string]$url, [bool]$download)
 {
-	$req = [Net.WebResponse]::Create($url)
+	$req = [Net.WebRequest]::Create($url)
 	$req.Timeout = $global:httpTimeout
 	if (!$download) { $req.Method = [Net.WebRequestMethods+Ftp]::GetFileSize }
 	$req.GetResponse()
