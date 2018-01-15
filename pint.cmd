@@ -418,7 +418,7 @@ function get-dist-link([Hashtable]$meta, [bool]$verbose)
 			write-host 'Extracting download link from' $dist
 			$out = ''
 		} else {
-			$quiet = '--quiet'
+			$silent = '--silent'
 			$out = '2>nul'
 		}
 
@@ -432,7 +432,7 @@ function get-dist-link([Hashtable]$meta, [bool]$verbose)
 		}
 
 		$xidel = get-dependency 'xidel'
-		$dist = & $env:ComSpec /d /c "$out `"$xidel`" $method $proxy --header=`"Referer: $dist`" --user-agent=`"$($env:PINT_USER_AGENT)`" `"$dist`" $follow $quiet --extract `"($link)[1]`""
+		$dist = & $env:ComSpec /d /c "$out `"$xidel`" $method $proxy --header=`"Referer: $dist`" --user-agent=`"$($env:PINT_USER_AGENT)`" `"$dist`" $follow $silent --extract `"($link)[1]`""
 
 		if ($lastexitcode -or !$dist -or !$dist.contains('://')) {
 			$dist = $null
@@ -593,7 +593,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 				if ($createdir = split-path $_) {
 					ensure-dir $createdir
 				}
-				ni (join-path $destDir $_) -type file -force | out-null
+				ni $createfile -type file -force | out-null
 			}
 		}
 	}
