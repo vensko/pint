@@ -14,6 +14,7 @@ if not defined PINT_APP_DIR set "PINT_APP_DIR=%~dp0apps"
 if not defined PINT_DEPS_DIR set "PINT_DEPS_DIR=%~dp0deps"
 if not defined PINT_SHIM_DIR set "PINT_SHIM_DIR=%PINT_APP_DIR%\.shims"
 if not defined PINT_USER_AGENT set "PINT_USER_AGENT=PintBot/1.0 (+https://github.com/vensko/pint)"
+if not defined PINT_PACKAGES_DIR set "PINT_PACKAGES_DIR=%~dp0packages"
 if not defined PINT_DB set "PINT_DB=https://d.vensko.net/pint/db/packages.ini, https://d.vensko.net/pint/db/portableapps.com.ini, %~dp0packages.user.ini"
 if not defined PINT_CACHE_TTL set "PINT_CACHE_TTL=24"
 
@@ -107,25 +108,102 @@ function string-to-xpath([string]$str, [bool]$rss)
 	) -join ' and '
 }
 
+### INI parser
+
 function ini-get-sections([string]$ini, [string]$search)
 {
 	[regex]::Matches($ini, "(?:^|\n)\[(.*?$search.*?)\]", 'IgnoreCase') |% {$_.groups[1].value} | get-unique
 }
 
-function pint-info([string]$section)
+function extract-ini-section([string]$ini, [string]$section)
 {
-	$m = [regex]::Matches((pint-db), "(?:^|\n)\[$section\](((?!\n\[).)+)", 'Singleline,IgnoreCase')
+	$m = [regex]::Matches($ini, "(?:^|\n)\[$section\](((?!\n\[).)+)", 'Singleline,IgnoreCase')
+	if (!$m.count) { return $null }
+	parse-ini-section $m[$m.count-1].groups[1].value
+}
 
-	if (!$m.count) {
-		throw "Unable to find '$section' in the database."
-	}
-
+function parse-ini-section([string]$ini)
+{
 	$res = @{}
-	[regex]::Matches($m[$m.count-1].groups[1].value, "^\s*(\w+?)\s*=\s*(.+)\s*$", 'm') |% {
+	[regex]::Matches($ini, "^\s*(\w+?)\s*=\s*(.+)\s*$", 'm') |% {
 		$res[$_.groups[1].value] = $_.groups[2].value.trim()
 	}
 	$res
 }
+
+### Databases
+
+function pint-dblist
+{
+	return clist $env:PINT_DB
+}
+
+function get-remote-db($url)
+{
+	try {
+		if ($env:PINT_CACHE_TTL -eq 0) {
+			return get-text $url
+		}
+
+		$cache = $url -replace '[^\w]', ''
+		$file = join-path $env:TEMP "pint-cache-$cache.ini"
+		$timespan = new-timespan -hours $env:PINT_CACHE_TTL
+
+		if ((is-file $file) -and (get-date) - (gi $file).LastWriteTime -lt $timespan) {
+			return [IO.File]::ReadAllText($file)
+		}
+
+		$text = get-text $url
+		$text | out-file $file -encoding ascii
+		$text
+	} catch {
+		write-host $_.Exception.InnerException.Message ' ' $url -f red
+		return ''
+	}
+}
+
+function pint-get-db-ini
+{
+	if ($global:db) {
+		return $global:db
+	}
+
+	$db = $global:dependencies
+
+	pint-dblist |% {
+		$db += "`n"
+		if (is-file $_) {
+			$db += [IO.File]::ReadAllText($_)
+		} elseif ($_.contains('://')) {
+			$db += get-remote-db $_
+		}
+	}
+
+	($global:db = $db)
+}
+
+function pint-app-info($app)
+{
+	$info = if (is-file ($file = join-path $env:PINT_PACKAGES_DIR "$app.ini")) {
+		parse-ini-section ([IO.File]::ReadAllText($file))
+	} else {
+		extract-ini-section (pint-get-db-ini) $app
+	}
+	if (!$info -or !$info.keys.count) {
+		throw "Unable to find '$app' in the database."
+	}
+	$info
+}
+
+function pint-app-list
+{
+	$list = @()
+	$list += dir $env:PINT_PACKAGES_DIR -n '*.ini' -ea 0 |% { [IO.Path]::GetFileNameWithoutExtension($_) }
+	$list += ini-get-sections (pint-get-db-ini)
+	$list | sort | get-unique
+}
+
+### Web requests
 
 function get-text($src)
 {
@@ -242,11 +320,16 @@ function get-remote-name([Net.WebResponse]$res)
 	($name -split '\?', 2)[0]
 }
 
+### Dependencies
+
 function get-dependency([string]$id)
 {
 	if (!(has-dependency $id)) {
 		write-host "Pint requires $id for this operation, installing automatically..."
+		$db = $global:db
+		$global:db = $global:dependencies
 		pint-force-install $id (join-path $env:PINT_DEPS_DIR $id) 32
+		$global:db = $db
 	}
 
 	join-path $env:PINT_DEPS_DIR "$id\$id.exe"
@@ -352,7 +435,7 @@ function pint-get-installed-app([string]$p)
 
 function pint-get-app-meta([string]$id, [string]$arch = $global:arch)
 {
-	$ini = pint-info $id
+	$ini = pint-app-info $id
 
 	$res = @{}
 	$ini.keys | sort |% {
@@ -593,7 +676,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 				if ($createdir = split-path $_) {
 					ensure-dir $createdir
 				}
-				ni $createfile -type file -force | out-null
+				ni (join-path $destDir $_) -type file -force | out-null
 			}
 		}
 	}
@@ -608,43 +691,6 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 	if ($destDir.StartsWith($env:PINT_APP_DIR)) {
 		pint-shims $destDir $meta.shim $meta.noshim | out-null
 	}
-}
-
-function pint-db
-{
-	if ($global:db) {
-		return $global:db
-	}
-
-	$db = $global:dependencies
-	$timespan = new-timespan -hours $env:PINT_CACHE_TTL
-
-	clist $env:PINT_DB |% {
-		try {
-			$url = $file = $_
-
-			if ($file.contains('://')) {
-				if ($env:PINT_CACHE_TTL -gt 0) {
-					$cache = $_ -replace '[^\w]', ''
-					$file = join-path $env:TEMP "pint-cache-$cache.ini"
-
-					if (!(is-file $file) -or (get-date) - (gi $file).LastWriteTime -gt $timespan) {
-						$text = get-text $_
-						$text | out-file $file -encoding ascii
-					}
-				}
-			} elseif (!(is-file $file)) {
-				return
-			}
-
-			$db += "`n" + (get-text $file)
-		} catch {
-			write-host $_.Exception.InnerException.Message ' ' $url -f red
-			return
-		}
-	}
-
-	($global:db = $db)
 }
 
 function pint-reinstall
@@ -892,7 +938,12 @@ function pint-unpin
 
 function pint-search([string]$term)
 {
-	ini-get-sections (pint-db) $term | sort
+	$list = pint-app-list
+	if ($term) {
+		$term = '*' + $term.trim('*') + '*'
+		return $list |? { $_ -like $term }
+	}
+	$list
 }
 
 function pint-cleanup
@@ -968,6 +1019,15 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, [bool]$del
 	}
 }
 
+function pint-info($app)
+{
+	try {
+		pint-app-info $app
+	} catch {
+		write-host $_ -f red
+	}
+}
+
 function pint-test([string]$subject, [string]$arch = $global:arch)
 {
 	$env:PINT_CACHE_TTL = 0
@@ -1020,7 +1080,6 @@ function pint-help
 		@('shims', 'Recreate all shim files.'),
 		@('test [<app>|<file.ini>] [32|64] ', 'Test app definitions.'),
 		@('info <app>', 'Show package configuration.'),
-		@('db', 'Output all database entries.'),
 		@('unpack <file> <path>', 'Extract a file to a specified directory.')
 	) |% {
 		write-host $_[0].padright(24, ' ') -f green -nonewline

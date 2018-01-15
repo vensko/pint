@@ -149,9 +149,6 @@ Examples:
 ### `pint info <app>`
 Show package configuration.
 
-### `pint db`
-Dumps all database entries.
-
 ### `pint unpack <file> <dir>`
 Unpacks a file to a specified directory.
 
