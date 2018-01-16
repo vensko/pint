@@ -15,7 +15,7 @@ if not defined PINT_DEPS_DIR set "PINT_DEPS_DIR=%~dp0deps"
 if not defined PINT_SHIM_DIR set "PINT_SHIM_DIR=%PINT_APP_DIR%\.shims"
 if not defined PINT_USER_AGENT set "PINT_USER_AGENT=PintBot/1.0 (+https://github.com/vensko/pint)"
 if not defined PINT_PACKAGES_DIR set "PINT_PACKAGES_DIR=%~dp0packages"
-if not defined PINT_DB set "PINT_DB=https://d.vensko.net/pint/db/packages.ini, https://d.vensko.net/pint/db/portableapps.com.ini, %~dp0packages.user.ini"
+if not defined PINT_DB set "PINT_DB=https://d.vensko.net/pint/db/packages.ini,%~dp0packages.user.ini"
 if not defined PINT_CACHE_TTL set "PINT_CACHE_TTL=24"
 
 rem Start 64bit PowerShell even from 32bit command line
