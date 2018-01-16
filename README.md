@@ -197,7 +197,8 @@ pint upgrade "E:\Total Commander\Plugins\Imagine"
 
 # More
 - [Environment Variables](https://github.com/vensko/pint/wiki/Environment-Variables)
-- [Database How To](https://github.com/vensko/pint/wiki/Database-How-To)
+- [Database: How To](https://github.com/vensko/pint/wiki/Database-How-To)
+- [Database: Repository](https://github.com/vensko/pint-packages)
 
 # Alternatives
 - [Scoop](https://github.com/lukesampson/scoop)
