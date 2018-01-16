@@ -214,11 +214,12 @@ call "D:\pint.cmd" %*
 
 # Database
 App definitions are described in INI format. File paths and URLs to .ini files are passed to Pint via the PINT_DB environment variable as a comma-separated list. Databases, registered by default:
-- [https://d.vensko.net/pint/db/packages.ini](https://d.vensko.net/pint/db/packages.ini) - maintained by Pint's author in [this repository](https://github.com/vensko/pint-packages).
-- [https://d.vensko.net/pint/db/portableapps.com.ini](https://d.vensko.net/pint/db/portableapps.com.ini) - automatically generated database of PortableApps.com packages. Their IDs end with `-pa`.
+- [https://d.vensko.net/pint/db/packages.ini](https://d.vensko.net/pint/db/packages.ini) - maintained by Pint's author in [this repository](https://github.com/vensko/pint-packages). Also includes automatically generated PortableApps.com database.
 - packages.user.ini - missing by default, can be used for custom app definitions.  
 
 Feel free to override PINT_DB with your own app sources.
+
+Alterntively, create a directory named 'packages' and add packages in separate files (one app per file, [example](https://github.com/vensko/pint-packages/tree/master/packages)).
 
 ## INI format
 Each app is described in a separate section:
