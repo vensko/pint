@@ -216,6 +216,7 @@ function pint-make-ftp-request([string]$url, [bool]$download)
 {
 	$req = [Net.WebRequest]::Create($url)
 	$req.Timeout = $global:httpTimeout
+	$req.KeepAlive = $false
 	if (!$download) { $req.Method = [Net.WebRequestMethods+Ftp]::GetFileSize }
 	$req.GetResponse()
 }
@@ -227,6 +228,7 @@ function pint-make-http-request([string]$url, [bool]$download)
 		$req.Timeout = $global:httpTimeout
 		$req.UserAgent = $env:PINT_USER_AGENT
 		$req.AllowAutoRedirect = $true
+		$req.KeepAlive = $false
 		$req.MaximumAutomaticRedirections = $global:httpMaxRedirects
 		$req.Accept = '*/*'
 		if (!$url.contains('sourceforge.net')) {
@@ -461,7 +463,7 @@ function get-dist-link([Hashtable]$meta, [bool]$verbose)
 	$link = $meta.link
 	$follow = $meta.follow
 
-	$rss = $dist.contains('/rss')
+	$rss = $dist.contains('/rss?')
 
 	if (!$link) {
 		if ($rss) {
