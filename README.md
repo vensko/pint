@@ -215,7 +215,7 @@ call "D:\pint.cmd" %*
 # Database
 App definitions are described in INI format. File paths and URLs to .ini files are passed to Pint via the PINT_DB environment variable as a comma-separated list. Databases, registered by default:
 - [https://d.vensko.net/pint/db/packages.ini](https://d.vensko.net/pint/db/packages.ini) - maintained by Pint's author in [this repository](https://github.com/vensko/pint-packages).  
-Also includes automatically imported databases: [PortableApps.com](https://portableapps.com/apps), [SyMenu](https://www.ugmfree.it/), [NirSoft](https://www.nirsoft.net/).
+Also includes automatically generated or imported databases: [PortableApps.com](https://portableapps.com/apps), [SyMenu](https://www.ugmfree.it/), [NirSoft](https://www.nirsoft.net/), [Sysinternals](https://docs.microsoft.com/en-us/sysinternals/).
 - packages.user.ini - missing by default, can be used for custom app definitions.  
 
 Feel free to override PINT_DB with your own app sources.
