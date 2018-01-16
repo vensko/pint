@@ -36,7 +36,7 @@ To install Pint, save [pint.cmd](https://github.com/vensko/pint/raw/master/pint.
 - **dist** *a directory for downloaded archives and installers*
 - **deps** *a directory for Pint's dependencies*
 
-All paths are customisable, see the [Environment variables](#environment-variables) chapter.
+All paths are customisable, see the [Environment variables](https://github.com/vensko/pint/wiki/Environment-Variables) chapter.
 
 # Requirements
 - Powershell 2.0+
@@ -195,116 +195,9 @@ pint installto imagine "E:\Total Commander\Plugins\Imagine"
 pint upgrade "E:\Total Commander\Plugins\Imagine"
 ```
 
-# Environment variables
-Certain parameters of Pint can be overriden with the following environment variables. All paths must include names, therefore they can be renamed as well.
- - **PINT_APP_DIR** - absolute path to the *apps* directory.
- - **PINT_DIST_DIR** - absolute path to the *dist* directory.
- - **PINT_SHIM_DIR** - absolute path to the *shims* directory. If changed, recreate shim files with `pint shims`.
- - **PINT_DEPS_DIR** - absolute path to the *deps* directory.
- - **PINT_DB** - comma-separated list of file paths and URLs to .ini files with app definitions.
- - **PINT_USER_AGENT** - Pint's user agent.
- - **PINT_CACHE_TTL** - remote sources are updated once in %PINT_CACHE_TTL% hours, set to 0 to disable the cache.
-
-The easiest way to override environment variables is to use a proxy .bat file with your parameters, something like this:
-```
-@echo off
-SET "PINT_APP_DIR=D:\Apps"
-call "D:\pint.cmd" %*
-```
-
-# Database
-App definitions are described in INI format. File paths and URLs to .ini files are passed to Pint via the PINT_DB environment variable as a comma-separated list. Databases, registered by default:
-- [https://d.vensko.net/pint/db/packages.ini](https://d.vensko.net/pint/db/packages.ini) - maintained by Pint's author in [this repository](https://github.com/vensko/pint-packages).  
-Also includes automatically generated or imported databases: [PortableApps.com](https://portableapps.com/apps), [SyMenu](https://www.ugmfree.it/), [NirSoft](https://www.nirsoft.net/), [Sysinternals](https://docs.microsoft.com/en-us/sysinternals/).
-- packages.user.ini - missing by default, can be used for custom app definitions.  
-
-Feel free to override PINT_DB with your own app sources.
-
-Alterntively, create a directory named 'packages' and add packages in separate files (one app per file, [example](https://github.com/vensko/pint-packages/tree/master/packages/pint)).
-
-## INI format
-Each app is described in a separate section:
-```
-[app-id]
-dist = http://example.com/dist.zip
-
-[another-app-id]
-dist = http://example.com/
-link = x86, .zip
-link64 = x64, .zip
-keep = *.xml
-```
-Use lowercase strings without spaces as application identifiers. They must be unique, otherwise they may be overridden by an app with the same id.  
-
-By default, new app definitions can be added to local file packages.user.ini.
-
-## Available keys
-Append *64* to a key to prefer it in a 64-bit system.
-```
-dist = http://example.com/archive.zip
-dist64 = http://example.com/archive64.zip
-```
-If a key has no a 64-bit counterpart, base name will be used as a fallback.
-
-### `dist`
-If `link` is not defined, `data` is treated as a direct download URL to a file. If `link` is defined, the URL must point to a web page. The only mandatory key.
-
-### `link`
-Must be either a full XPath expression, starting with // and searching for &lt;a&gt; elements, or a comma-separated list of words, expected to be found in a download URL.  
-**XPath example:** `//a[contains(@href, '.zip') and contains(@href, 'x86')]`  
-**Simplified syntax:** `.zip, x86`  
-To scan link texts, wrap words in quotes: `.zip, "portable"`  
-Simplified queries are case-insensitive.
-
-There are some meta-values:  
-`.arch` means any of the most popular archive formats (at the moment, it includes .7z, .zip, .rar, and .paf.exe),  
-`.any` is the same as `.arch` plus .exe.
-
-Thanks to Xidel, JSON is supported. Consult [Xidel's documentation](http://www.videlibri.de/xidel.html#examples) (11. Reading JSON) on how to use the $json function. A few usage examples can also be found in [default database](https://d.vensko.net/pint/db/packages.ini).
-
-### `follow`
-When a download requires following through one or more web pages, set `follow` value to a list of consequent queries (same way as `link`), separated by |, leading to a page with a download link. `link` is still needed, when `follow` is set.  
-Example: `"click here" | "go to download page"`
-
-### `type`
-Possible values:
-- `standalone` - downloaded file will be considered an executable and will be copied as is with filename equal to app id.
-- `inno` - force installer type to Inno Setup.
-- `zip`, `cab`, etc. - any format, supported by 7-zip.
-
-Usually, type enforcement is not needed, use it only when autodetection fails.
-
-### `base`
-A base path inside an archive. To better explain this, I better tell, how this works. Once the archive is unpacked into a temporary directory, the script switches to that directory and retrieves a list of files. Then it goes line by line, until the `base` substring is found (it doesn't have to be a valid file or directory path, can be just a fragment). Once this substring is encountered, the working path changes to the directory, containing the file, where the search stopped. *Parent* directory of that file/dir will become the base path.  
-Default `base` value is `.exe`, which means, that the first encountered directory with an .exe file will be used.
-
-### `keep`
-Pint *replaces* contents of target directories, keeping files, listed in this parameter, intact. Typically, is used for configuration files. Must be a comma separated list of filenames/masks.  
-Default value: `*.ini, *.db`.
-
-### `only`
-Comma-separated list of specific files/masks, which should be copied.
-
-### `xd`, `xf`
-Comma-separated lists of directores and files (respectively), which should be left behind. These files will be neither removed from a target directory, nor copied from a temporary one. Pint uses Robocopy to copy files. These parameters are used as values for its /XD and /XF parameters. If `only` is set, these parameters are ignored.
-
-### `purge`
-If set to `false`, Pint only copies new files to a target directory instead of full replacement (the /PURGE parameter for robocopy).
-
-### `noshim`
-Pint automatically detects console applications and creates shim files for them. Files, listed in `noshim`, will be skipped.
-
-### `shim`
-Sometimes console app detector misses them. Add file names/masks to `shim` to force shim creation for them.
-
-### `create`
-To enable portable mode, some applications require particular files to be created. These files can be listed in `create`.
-
-### `method`
-Set HTTP method for link request (GET by default).  
-
-### `data`
-If **method** is changed to POST, use this key to set custom payload in the x-www-form-urlencoded format.  
+# More
+- [Environment Variables](https://github.com/vensko/pint/wiki/Environment-Variables)
+- [Database How To](https://github.com/vensko/pint/wiki/Database-How-To)
 
 # Alternatives
 - [Scoop](https://github.com/lukesampson/scoop)
