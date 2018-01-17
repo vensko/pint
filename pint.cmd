@@ -319,7 +319,7 @@ function get-remote-name([Net.WebResponse]$res)
 		($res.ResponseUri -split '/')[-1]
 	}
 
-	($name -split '\?', 2)[0]
+	($name -split '[;:\?]', 2)[0]
 }
 
 ### Dependencies
