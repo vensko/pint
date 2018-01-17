@@ -578,7 +578,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 	ensure-dir $destDir
 
 	if ($meta.type -eq 'standalone') {
-		copy -literalpath $file (join-path $destDir "$id.exe") -force
+		copy -literalpath $file (join-path $destDir ($id + $item.extension)) -force
 	} else {
 		$tempDir = join-path $env:TEMP "pint-$id-$(get-random)"
 		ensure-dir $tempDir
