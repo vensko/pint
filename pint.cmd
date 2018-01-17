@@ -583,7 +583,12 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 		$tempDir = join-path $env:TEMP "pint-$id-$(get-random)"
 		ensure-dir $tempDir
 
-		pint-unpack $file $tempDir $meta.type
+		if ($meta.args -and $item.extension -eq '.exe') {
+			$a = '"' + $file + '" ' + $meta.args.replace('$dir', $tempDir)
+			& $env:ComSpec /d /c "$a"
+		} else {
+			pint-unpack $file $tempDir $meta.type
+		}
 
 		cd $tempDir
 
@@ -1106,3 +1111,4 @@ function pint-start($cmd)
 	write-host 'Unknown command'
 	exit 1
 }
+
