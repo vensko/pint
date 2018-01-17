@@ -168,7 +168,7 @@ function pint-get-db-ini
 		return $global:db
 	}
 
-	$db = $global:dependencies
+	$db = ''
 
 	pint-dblist |% {
 		$db += "`n"
@@ -678,12 +678,11 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 
 	if ($meta.create) {
 		clist $meta.create |% {
-			$createfile = join-path $destDir $_
-			if (!(is-file $createfile)) {
-				if ($createdir = split-path $_) {
-					ensure-dir $createdir
-				}
-				ni (join-path $destDir $_) -type file -force | out-null
+			$newitem = join-path $destDir $_
+			if ($newitem.endswith("\")) {
+				ensure-dir $newitem
+			} elseif (!(is-file $newitem)) {
+				ni $newitem -type file -force -ea 0 | out-null
 			}
 		}
 	}
