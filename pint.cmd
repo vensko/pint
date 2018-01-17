@@ -697,6 +697,10 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 	if ($destDir.StartsWith($env:PINT_APP_DIR)) {
 		pint-shims $destDir $meta.shim $meta.noshim | out-null
 	}
+
+	if ($meta.note) {
+		write-host $meta.note -f yellow
+	}
 }
 
 function pint-reinstall
