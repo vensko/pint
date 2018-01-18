@@ -208,8 +208,16 @@ function pint-app-list
 function get-text($src)
 {
 	$client = new-object Net.WebClient
-	$client.Headers['User-Agent'] = $env:PINT_USER_AGENT
+	$client.Headers['User-Agent'] = user-agent $src
 	$client.DownloadString($src)
+}
+
+function user-agent($url)
+{
+	if ($url -match '(dropbox\.com|osdn\.)') {
+		return 'curl/7.55.0'
+	}
+	$env:PINT_USER_AGENT
 }
 
 function pint-make-ftp-request([string]$url, [bool]$download)
@@ -226,7 +234,7 @@ function pint-make-http-request([string]$url, [bool]$download)
 	try {
 		$req = [Net.WebRequest]::Create($url)
 		$req.Timeout = $global:httpTimeout
-		$req.UserAgent = $env:PINT_USER_AGENT
+		$req.userAgent = user-agent $url
 		$req.AllowAutoRedirect = $true
 		$req.KeepAlive = $false
 		$req.MaximumAutomaticRedirections = $global:httpMaxRedirects
@@ -250,19 +258,10 @@ function pint-make-http-request([string]$url, [bool]$download)
 function pint-make-request([string]$url, [bool]$download)
 {
 	if ($url.StartsWith('ftp:')) {
-		$res = pint-make-ftp-request $url $download
+		pint-make-ftp-request $url $download
 	} else {
-		$res = pint-make-http-request $url $download
-
-		if (([string]$res.ContentType).contains('text/html')) {
-			$res.close()
-			throw "$url responded with a HTML page."
-		}
+		pint-make-http-request $url $download
 	}
-
-	if (!$download) { $res.close() }
-
-	$res
 }
 
 function download-file([Net.WebResponse]$res, [string]$targetFile)
@@ -537,7 +536,18 @@ function make-app-request([string]$id, [string]$arch, [bool]$download, [bool]$ve
 {
 	$meta = pint-get-app-meta $id $arch
 	$url = get-dist-link $meta $verbose
-	pint-make-request $url $download
+	$res = pint-make-request $url $download
+
+	if ($res.ContentType.contains('text/html')) {
+		$res.close()
+		throw "$url responded with a HTML page."
+	}
+
+	if (!$download) {
+		$res.close()
+	}
+
+	$res
 }
 
 function pint-download-app([string]$id, [string]$arch = $global:arch, $res = $null)
