@@ -956,11 +956,11 @@ function pint-unpin
 	}
 }
 
-function pint-search([string]$term)
+function pint-search
 {
 	$list = pint-app-list
-	if ($term) {
-		$term = '*' + $term.trim('*') + '*'
+	if ($args) {
+		$term = '*' + ($args -join ' ' -replace '[^\w]+','*').trim('*') + '*'
 		return $list |? { $_ -like $term }
 	}
 	$list
