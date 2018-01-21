@@ -239,7 +239,7 @@ function pint-make-http-request([string]$url, [bool]$download)
 		$req.KeepAlive = $false
 		$req.MaximumAutomaticRedirections = $global:httpMaxRedirects
 		$req.Accept = '*/*'
-		if (!$url.contains('sourceforge.net')) {
+		if (!$url.contains('sourceforge.net') -and !$url.contains('downloads.portableapps.com')) {
 			$req.Referer = $url
 		}
 		$req.GetResponse()
@@ -462,67 +462,58 @@ function get-dist-link([Hashtable]$meta, [bool]$verbose)
 	$link = $meta.link
 	$follow = $meta.follow
 
+	if (!$link) { return $dist }
+
 	$rss = $dist.contains('/rss?')
 
-	if (!$link) {
-		if ($rss) {
-			$link = '//item/link'
-		} elseif ($dist.EndsWith('.xml') -or $dist.EndsWith('/pad.php')) {
-			if ($verbose) { write-host 'PAD file detected.' }
-			$link = "//Primary_Download_URL"
+	if (!$link.contains('$json') -and !($link.contains('json('))) {
+		if (!$link.contains('//')) {
+			$link = string-to-xpath $link $rss
+			$link = if ($rss) {"//link[$link]"} else {"//a[$link]"}
+		}
+
+		if ($link.contains('/a')) {
+			$link += '/resolve-uri(normalize-space(@href), base-uri())'
 		}
 	}
 
-	if ($link) {
-		if (!$link.contains('$json') -and !($link.contains('json('))) {
-			if (!$link.contains('//')) {
-				$link = string-to-xpath $link $rss
-				$link = if ($rss) {"//link[$link]"} else {"//a[$link]"}
-			}
+	$link = $link.replace('"', "\`"")
 
-			if ($link.contains('/a')) {
-				$link += '/resolve-uri(normalize-space(@href), base-uri())'
-			}
-		}
-
-		$link = $link.replace('"', "\`"")
-
-		if ($follow) {
-			if (!$follow.contains('//')) {
-				$follow = ($follow -split '\|' |% {
-					'--follow "(//a[' + (string-to-xpath $_).replace('"', "\`"") + '])[1]"'
-				}) -join ' '
-			} else {
-				$follow = $follow.replace('"', "\`"") -replace '\s*\|\s*','" --follow "'
-				$follow = " --follow `"$follow`""
-			}
-		}
-
-		if ($verbose) {
-			write-host 'Extracting download link from' $dist
-			$out = ''
+	if ($follow) {
+		if (!$follow.contains('//')) {
+			$follow = ($follow -split '\|' |% {
+				'--follow "(//a[' + (string-to-xpath $_).replace('"', "\`"") + '])[1]"'
+			}) -join ' '
 		} else {
-			$silent = '--silent'
-			$out = '2>nul'
+			$follow = $follow.replace('"', "\`"") -replace '\s*\|\s*','" --follow "'
+			$follow = " --follow `"$follow`""
 		}
+	}
 
-		$method = if ($meta.method) {'-d "'+$meta.data+'" --method '+$meta.method} else {''}
+	if ($verbose) {
+		write-host 'Extracting download link from' $dist
+		$out = ''
+	} else {
+		$silent = '--silent'
+		$out = '2>nul'
+	}
 
-		$proxy = ''
-		$proxyConfig = get-itemproperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
-		if ($proxyConfig.ProxyEnable) {
-			$proxyAddr = $proxyConfig.ProxyServer -replace "^http://", ""
-			$proxy = "--proxy=`"$proxyAddr`""
-		}
+	$method = if ($meta.method) {'-d "'+$meta.data+'" --method '+$meta.method} else {''}
 
-		$xidel = get-dependency 'xidel'
-		$dist = & $env:ComSpec /d /c "$out `"$xidel`" $method $proxy --header=`"Referer: $dist`" --user-agent=`"$($env:PINT_USER_AGENT)`" `"$dist`" $follow $silent --extract `"($link)[1]`""
+	$proxy = ''
+	$proxyConfig = get-itemproperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+	if ($proxyConfig.ProxyEnable) {
+		$proxyAddr = $proxyConfig.ProxyServer -replace "^http://", ""
+		$proxy = "--proxy=`"$proxyAddr`""
+	}
 
-		if ($lastexitcode -or !$dist -or !$dist.contains('://')) {
-			$dist = $null
-		} else {
-			$dist = $dist.trim()
-		}
+	$xidel = get-dependency 'xidel'
+	$dist = & $env:ComSpec /d /c "$out `"$xidel`" $method $proxy --header=`"Referer: $dist`" --user-agent=`"$($env:PINT_USER_AGENT)`" `"$dist`" $follow $silent --extract `"($link)[1]`""
+
+	if ($lastexitcode -or !$dist -or !$dist.contains('://')) {
+		$dist = $null
+	} else {
+		$dist = $dist.trim()
 	}
 
 	if (!$dist) {
@@ -535,7 +526,7 @@ function get-dist-link([Hashtable]$meta, [bool]$verbose)
 function make-app-request([string]$id, [string]$arch, [bool]$download, [bool]$verbose)
 {
 	$meta = pint-get-app-meta $id $arch
-	$url = get-dist-link $meta $verbose
+	$url = if ($meta.link) { get-dist-link $meta $verbose } else { $meta.dist }
 	$res = pint-make-request $url $download
 
 	if ($res.ContentType.contains('text/html')) {
