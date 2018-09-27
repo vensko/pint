@@ -5,12 +5,13 @@
 rem PINT - Portable INsTaller
 rem https://github.com/vensko/pint
 
-SET "PINT=%~f0"
+set "PINT=%~f0"
 set "PINT_SELF_URL=https://raw.githubusercontent.com/vensko/pint/master/pint.cmd"
+set "PINT_CURRENT_DIR=%cd%"
 
 rem Set variables if they weren't overriden
-if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0dist"
 if not defined PINT_APP_DIR set "PINT_APP_DIR=%~dp0apps"
+if not defined PINT_DIST_DIR set "PINT_DIST_DIR=%~dp0dist"
 if not defined PINT_DEPS_DIR set "PINT_DEPS_DIR=%~dp0deps"
 if not defined PINT_SHIM_DIR set "PINT_SHIM_DIR=%PINT_APP_DIR%\.shims"
 if not defined PINT_USER_AGENT set "PINT_USER_AGENT=PintBot/1.0 (+https://github.com/vensko/pint)"
@@ -19,7 +20,7 @@ if not defined PINT_DB set "PINT_DB=https://d.vensko.net/pint/db/packages.ini,%~
 if not defined PINT_CACHE_TTL set "PINT_CACHE_TTL=24"
 
 rem Start 64bit PowerShell even from 32bit command line
-SET "POWERSHELL=%SystemRoot%\sysnative\windowspowershell\v1.0\powershell.exe"
+set "POWERSHELL=%SystemRoot%\sysnative\windowspowershell\v1.0\powershell.exe"
 if not exist "%POWERSHELL%" set "POWERSHELL=powershell"
 
 set "_args=%*"
@@ -239,7 +240,7 @@ function pint-make-http-request([string]$url, [bool]$download)
 		$req.KeepAlive = $false
 		$req.MaximumAutomaticRedirections = $global:httpMaxRedirects
 		$req.Accept = '*/*'
-		if (!$url.contains('sourceforge.net') -and !$url.contains('downloads.portableapps.com')) {
+		if (!$url.contains('sourceforge.net') -and !$url.contains('portableapps.com')) {
 			$req.Referer = $url
 		}
 		$req.GetResponse()
@@ -378,8 +379,8 @@ function pint-unpack([string]$file, [string]$dir, [string]$type)
 function pint-get-version([string]$dir)
 {
 	try {
-		$files = dir $dir -filter *.exe -exclude *portable.exe -ea 0
-		if (!$files) { $files = dir $dir -r -filter *.exe -exclude *portable.exe -ea 1 }
+		$files = dir $dir -filter *.exe -exclude *portable.exe,uninst*.exe -ea 0
+		if (!$files) { $files = dir $dir -r -filter *.exe -exclude *portable.exe,uninst*.exe -ea 1 }
 		$v = ($files | sort length -desc | select -first 1).VersionInfo.ProductVersion.trim()
 		$v = $v.replace(', ', '.').replace(',', '.')
 		$v = ($v -split '[- ]+', 2)[0]
@@ -397,7 +398,11 @@ function distdir([string]$file)
 function appdir([string]$path)
 {
 	if (![IO.Path]::isPathRooted($path)) {
-		$path = join-path $env:PINT_APP_DIR $path
+		if ($path.StartsWith('.')) {
+			$path = (gi (join-path $env:PINT_CURRENT_DIR $path)).fullname
+		} else {
+			$path = join-path $env:PINT_APP_DIR $path
+		}
 	}
 	$path
 }
@@ -992,6 +997,8 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, [bool]$del
 	cd $shimdir
 
 	dir $dir @params |% {
+		if ($_.fullname.StartsWith($shimdir)) { return }
+
 		$name = $_.name
 
 		if ($_.extension -eq '.exe' -and (!$includeArr -or !($includeArr |? { $name -like $_ }))) {
@@ -1099,10 +1106,27 @@ function pint-help
 
 	write-host "`n`<app`> is a database ID, which can be seen via the search command."
 	write-host "`<dir`> is a path, relative to the 'apps' directory, as shown via 'list' command."
+
+	write-host "`nWorking directories:" -f yellow
+
+	pint-dir-vars |% {
+		write-host "${_}:" ([Environment]::GetEnvironmentVariable($_))
+	}
+}
+
+function pint-dir-vars
+{
+	@('PINT_APP_DIR', 'PINT_DIST_DIR', 'PINT_DEPS_DIR', 'PINT_SHIM_DIR')
 }
 
 function pint-start($cmd)
 {
+	pint-dir-vars |% {
+		$dir = [Environment]::GetEnvironmentVariable($_)
+		$dir = if (!(is-dir $dir)) { md $dir } else { gi $dir }
+		[Environment]::SetEnvironmentVariable($_, $dir.fullname)
+	}
+
 	if (!$cmd) { pint-help; exit 0 }
 
 	$cmd = 'pint-' + $cmd
@@ -1115,4 +1139,3 @@ function pint-start($cmd)
 	write-host 'Unknown command'
 	exit 1
 }
-
