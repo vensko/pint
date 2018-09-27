@@ -996,7 +996,7 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, [bool]$del
 	ensure-dir $shimdir
 	cd $shimdir
 
-	dir $dir @params |% {
+	dir $dir @params | Sort {$_.LastWriteTime} |% {
 		if ($_.fullname.StartsWith($shimdir)) { return }
 
 		$name = $_.name
@@ -1031,7 +1031,7 @@ function pint-shims([string]$dir, [string]$include, [string]$exclude, [bool]$del
 			}
 		} else {
 			$relpath = rvpa -relative -literalpath $_.fullname
-			& (get-dependency 'shimgen') -p $relpath -o $shim -i $relpath | out-null
+			& (get-dependency 'shimgen') -p $relpath -o $shim | out-null
 			write-host 'Added' $name
 		}
 	}
