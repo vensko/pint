@@ -596,11 +596,7 @@ function pint-file-install([string]$id, [string]$file, [string]$destDir, [string
 			pint-unpack $file $tempDir $meta.type
 		}
 
-		cd $tempDir
-
-		if ($tempDir -ne $pwd) {
-			throw "Unable to use $tempDir as a temporary directory."
-		}
+		cd -ea stop $tempDir
 
 		$base = if ($meta.base) {$meta.base} else {'.exe'}
 
